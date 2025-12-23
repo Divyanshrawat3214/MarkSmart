@@ -23,6 +23,7 @@ from flask_login import current_user, LoginManager, UserMixin, login_user as fla
 from student_auth import validate_password, hash_password, verify_password
 from database import get_db
 import re
+import bcrypt
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.SECRET_KEY
@@ -1284,3 +1285,4 @@ if __name__ == "__main__":
         port=config.PORT,
         use_reloader=not config.IS_PRODUCTION
     )
+
