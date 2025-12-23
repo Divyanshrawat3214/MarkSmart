@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 import zipfile
 import config
-from models import StudentModel, AttendanceModel, FeedbackModel, compute_face_embedding
+from models import StudentModel, AttendanceModel, FeedbackModel, compute_face_embedding, UserModel
 from auth import init_auth, login_required
 from functools import wraps
 from flask_login import current_user, LoginManager, UserMixin, login_user as flask_login_user, logout_user
@@ -24,6 +24,7 @@ from student_auth import validate_password, hash_password, verify_password
 from database import get_db
 import re
 import bcrypt
+from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.SECRET_KEY
@@ -60,6 +61,8 @@ class StudentUser(UserMixin):
         self.id = f"student:{enroll_no}"
         self.enroll_no = enroll_no
         self.user_type = "student"
+        # Provide a username attribute so code that expects current_user.username works
+        self.username = str(enroll_no)
 
 # Initialize authentication (admin) - this sets up the main login_manager
 init_auth(app)
@@ -68,19 +71,27 @@ init_auth(app)
 from auth import login_manager, User
 @login_manager.user_loader
 def load_user(user_id):
+    if not user_id:
+        return None
+
+    # Student users are stored with id "student:<enroll_no>"
     if user_id.startswith("student:"):
         enroll_no = user_id.split(":", 1)[1]
         try:
             student = StudentModel.get_by_enroll(enroll_no)
             if student and student.get('password_hash'):
                 return StudentUser(enroll_no)
-        except:
-            pass
+        except Exception:
+            # Fail silently: return None if lookup fails
+            return None
     else:
         # Admin user
-        user = UserModel.get_by_username(user_id)
-        if user:
-            return User(user_id)
+        try:
+            user = UserModel.get_by_username(user_id)
+            if user:
+                return User(user_id)
+        except Exception:
+            return None
     return None
 
 # Add security headers middleware
@@ -146,12 +157,21 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated:
             return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
-        
-        username = current_user.username.lower()
-        if not config.ADMIN_USERNAMES or username not in config.ADMIN_USERNAMES:
-            app.logger.warning(f"Non-admin user '{current_user.username}' attempted to access admin-only endpoint")
-            return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
-        
+
+        # Use getattr to avoid AttributeError when current_user doesn't have username
+        username = getattr(current_user, 'username', '') or ''
+        username_lower = username.lower() if isinstance(username, str) else ''
+
+        # Enforce ADMIN_USERNAMES only if configured (non-empty)
+        if config.ADMIN_USERNAMES:
+            try:
+                allowed = [u.lower() for u in config.ADMIN_USERNAMES]
+            except Exception:
+                allowed = []
+            if username_lower not in allowed:
+                app.logger.warning(f"Non-admin user '{username}' attempted to access admin-only endpoint")
+                return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -175,8 +195,8 @@ def verify_qr_token(token):
     """Verify JWT token from QR code with enhanced security"""
     try:
         payload = jwt.decode(
-            token, 
-            config.JWT_SECRET_KEY, 
+            token,
+            config.JWT_SECRET_KEY,
             algorithms=['HS256'],
             audience='attendance',
             issuer='marksmart'
@@ -201,26 +221,26 @@ def generate_qr():
         # CSRF token is automatically validated by Flask-WTF
         token = generate_qr_token()
         qr_data = f"{request.url_root}scan?token={token}"
-        
+
         # Generate QR code image
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_data)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Save QR code
         today = datetime.date.today().strftime('%Y-%m-%d')
         qr_filename = f"{today}_{secrets.token_hex(8)}.png"
         qr_path = os.path.join(config.QR_DIR, qr_filename)
         img.save(qr_path)
-        
+
+        # Do not expose raw token unless explicitly required
         return jsonify({
             'status': 'success',
             'qr_url': f'/static/qr_codes/{qr_filename}',
-            'token': token,
             'expires_in': config.JWT_EXPIRY_MINUTES * 60
         })
-    
+
     return render_template('qr_generate.html')
 
 @app.route('/scan')
@@ -229,11 +249,11 @@ def scan():
     token = request.args.get('token')
     if not token:
         return render_template('scan.html', error='No token provided. Please scan the QR code.', token=None)
-    
+
     payload = verify_qr_token(token)
     if not payload:
         return render_template('scan.html', error='Invalid or expired token. Please scan a fresh QR code.', token=None)
-    
+
     return render_template('scan.html', token=token, date=payload.get('date'))
 
 @app.route('/api/attendance/verify', methods=['POST'])
@@ -246,54 +266,53 @@ def verify_attendance():
         origin = request.headers.get('Origin') or request.headers.get('Referer', '')
         # Allow requests from same origin or trusted origins
         if origin and not origin.startswith(request.url_root.rstrip('/')):
-            # For additional security, you can whitelist specific origins
-            # For now, we allow same origin only
             app.logger.warning(f"Invalid origin attempt from {get_remote_address()}: {origin}")
-    
+            return jsonify({'status': 'error', 'message': 'Invalid origin'}), 403
+
     token = request.form.get('token')
     if not token:
         app.logger.warning(f"Attendance verification attempt without token from IP {get_remote_address()}")
         return jsonify({'status': 'error', 'message': 'No token provided'}), 400
-    
+
     # Verify token
     payload = verify_qr_token(token)
     if not payload:
         return jsonify({'status': 'error', 'message': 'Invalid or expired token'}), 400
-    
+
     # Get liveness result
     liveness_passed = request.form.get('liveness_passed', 'false').lower() == 'true'
     liveness_score = request.form.get('liveness_score', '0')
-    
+
     if not liveness_passed:
         return jsonify({'status': 'error', 'message': 'Liveness check failed'}), 400
-    
+
     # Get location - REQUIRED for attendance
     latitude = request.form.get('latitude')
     longitude = request.form.get('longitude')
-    
+
     if not latitude or not longitude:
         app.logger.warning(f"Attendance verification attempt without location from IP {get_remote_address()}")
         return jsonify({'status': 'error', 'message': 'Location is required to mark attendance'}), 400
-    
+
     # Validate latitude and longitude
     try:
         latitude_float = float(latitude)
         longitude_float = float(longitude)
-        
+
         if not (-90 <= latitude_float <= 90):
             app.logger.warning(f"Invalid latitude value: {latitude} from IP {get_remote_address()}")
             return jsonify({'status': 'error', 'message': 'Invalid latitude value'}), 400
-        
+
         if not (-180 <= longitude_float <= 180):
             app.logger.warning(f"Invalid longitude value: {longitude} from IP {get_remote_address()}")
             return jsonify({'status': 'error', 'message': 'Invalid longitude value'}), 400
-        
+
         latitude = str(latitude_float)
         longitude = str(longitude_float)
     except (ValueError, TypeError):
         app.logger.warning(f"Non-numeric location values: lat={latitude}, lng={longitude} from IP {get_remote_address()}")
         return jsonify({'status': 'error', 'message': 'Invalid location format'}), 400
-    
+
     # Get photo
     file = request.files.get('photo')
     if not file:
@@ -303,19 +322,19 @@ def verify_attendance():
     img_bytes = file.read()
     if not img_bytes:
         return jsonify({'status': 'error', 'message': 'Empty file uploaded'}), 400
-    
+
     # Check image size (too small might be a photo, not live capture)
     if len(img_bytes) < 10000:  # Less than 10KB is suspicious
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'Image quality too low. Please ensure you are using a live camera (not a photo).'
         }), 400
-    
+
     npimg = np.frombuffer(img_bytes, dtype=np.uint8)
     img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
     if img is None:
         return jsonify({'status': 'error', 'message': 'Could not decode image'}), 400
-    
+
     # Check image dimensions (live camera should have reasonable resolution)
     height, width = img.shape[:2]
     if width < 200 or height < 200:
@@ -323,13 +342,13 @@ def verify_attendance():
             'status': 'error',
             'message': 'Image resolution too low. Please use a live camera with good quality.'
         }), 400
-    
+
     rgb = img[:, :, ::-1]
 
     # Detect faces and compute encoding
     faces = face_recognition.face_locations(rgb)
     app.logger.info(f"Face detection: Found {len(faces)} face(s) in image from IP {get_remote_address()}")
-    
+
     # Reject multiple faces explicitly for security
     if len(faces) > 1:
         app.logger.warning(f"Multiple faces detected ({len(faces)}) from IP {get_remote_address()} - rejecting")
@@ -337,59 +356,59 @@ def verify_attendance():
             'status': 'error',
             'message': 'Multiple faces detected. Please ensure only one person is in the frame.'
         }), 400
-    
+
     encodings = face_recognition.face_encodings(rgb, faces)
     app.logger.info(f"Face encoding: Generated {len(encodings)} encoding(s)")
-    
+
     if len(encodings) == 0:
         app.logger.warning(f"No face detected in image from IP {get_remote_address()}")
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'No face found in image. Please ensure your face is clearly visible and try again.'
         }), 400
-    
+
     # Get all student embeddings
     # Note: Currently returns one embedding per student, but logic supports multiple embeddings per student
     student_embeddings, student_names, student_enrolls = StudentModel.get_all_embeddings()
-    
+
     if len(student_embeddings) == 0:
         app.logger.error("No enrolled students found in database")
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'No enrolled students found. Please add students first via the admin panel.'
         }), 500
-    
+
     app.logger.info(f"Face verification: Found {len(student_embeddings)} student embeddings from {len(set(student_enrolls))} unique students")
-    
+
     # Face matching logic:
     # 1. Evaluate ALL detected face encodings (even though we reject multiple faces, we check the one we have)
     # 2. Compare against ALL student embeddings (supports multiple embeddings per student)
     # 3. Track global minimum distance across all comparisons
     # 4. Accept match ONLY if best_distance_overall <= FACE_TOLERANCE
-    
+
     best_distance_overall = float('inf')
     best_match_enroll = None
     best_match_name = None
-    
+
     # Compare each detected encoding against ALL student embeddings
     for detected_encoding in encodings:
         try:
             # face_distance returns array of distances: one distance per student embedding
             # This supports multiple embeddings per student (each embedding gets its own distance)
             distances = face_recognition.face_distance(student_embeddings, detected_encoding)
-            
+
             # Find the minimum distance for this detected encoding across all student embeddings
             min_idx = int(np.argmin(distances))
             min_distance = float(distances[min_idx])
-            
+
             app.logger.debug(f"Face encoding comparison: min_distance={min_distance:.4f} for student {student_enrolls[min_idx]}")
-            
+
             # Track global minimum across ALL detected encodings and ALL student embeddings
             if min_distance < best_distance_overall:
                 best_distance_overall = min_distance
                 best_match_enroll = student_enrolls[min_idx]
                 best_match_name = student_names[min_idx]
-        
+
         except Exception as ex:
             app.logger.error(f"Error during face comparison: {str(ex)}", exc_info=not config.IS_PRODUCTION)
             # Encoding failure: reject
@@ -397,20 +416,20 @@ def verify_attendance():
                 'status': 'error',
                 'message': 'Face recognition error. Please try again.'
             }), 500
-    
+
     # Accept match ONLY if best_distance_overall <= FACE_TOLERANCE
     if best_match_enroll is None or best_distance_overall > config.FACE_TOLERANCE:
         app.logger.warning(f"Failed face match: best_distance={best_distance_overall:.4f}, threshold={config.FACE_TOLERANCE}, IP={get_remote_address()}")
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'No matching student found. Please ensure:\n- You are enrolled in the system\n- Your face is clearly visible\n- Good lighting conditions'
         }), 404
-    
+
     # Match found and verified
     match_enroll = best_match_enroll
     match_name = best_match_name
     app.logger.info(f"Face matched successfully: {match_name} ({match_enroll}) with distance {best_distance_overall:.4f}")
-    
+
     # Check if already marked present today
     today = datetime.datetime.now().strftime('%Y-%m-%d')
     today_records = AttendanceModel.get_by_date(today)
@@ -421,12 +440,12 @@ def verify_attendance():
                 'message': f'Attendance already marked for {match_name} today',
                 'student_name': match_name
             }), 200
-    
+
     # Add attendance
     now = datetime.datetime.now()
     date_str = now.strftime('%Y-%m-%d')
     time_str = now.strftime('%H:%M:%S')
-    
+
     AttendanceModel.add(
         enroll_no=match_enroll,
         name=match_name,
@@ -436,7 +455,7 @@ def verify_attendance():
         longitude=longitude,
         liveness_score=liveness_score
     )
-    
+
     return jsonify({
         'status': 'success',
         'message': f'Attendance marked successfully for {match_name}',
@@ -460,30 +479,30 @@ def add_student():
     name = request.form.get('name', '').strip()
     class_name = request.form.get('class', '').strip()
     metadata = request.form.get('metadata', '').strip()
-    
+
     if not enroll_no or not name or not class_name:
         return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
-    
+
     # Handle photo upload
     photo = request.files.get('photo')
     if not photo:
         return jsonify({'status': 'error', 'message': 'Photo is required'}), 400
-    
+
     if not allowed_file(photo.filename):
         return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
-    
+
     # Save photo with random UUID for security (non-guessable filename)
     file_ext = os.path.splitext(photo.filename)[1] if '.' in photo.filename else '.jpg'
     random_id = uuid.uuid4().hex
     filename = secure_filename(f"{enroll_no}_{random_id}{file_ext}")
     photo_path = os.path.join(config.UPLOADS_DIR, filename)
     photo.save(photo_path)
-    
+
     # Compute face embedding
     face_embedding = compute_face_embedding(photo_path)
     if face_embedding is None:
         return jsonify({'status': 'error', 'message': 'Could not detect face in photo'}), 400
-    
+
     # Add student
     success, message = StudentModel.add(
         enroll_no=enroll_no,
@@ -493,7 +512,7 @@ def add_student():
         face_embedding=face_embedding,
         metadata=metadata
     )
-    
+
     if success:
         return jsonify({'status': 'success', 'message': message})
     else:
@@ -506,10 +525,10 @@ def edit_student(enroll_no):
     name = request.form.get('name', '').strip()
     class_name = request.form.get('class', '').strip()
     metadata = request.form.get('metadata', '').strip()
-    
+
     face_embedding = None
     photo_filename = None
-    
+
     # Handle photo update if provided
     photo = request.files.get('photo')
     if photo and allowed_file(photo.filename):
@@ -521,7 +540,7 @@ def edit_student(enroll_no):
         photo.save(photo_path)
         photo_filename = filename
         face_embedding = compute_face_embedding(photo_path)
-    
+
     success, message = StudentModel.update(
         enroll_no=enroll_no,
         name=name if name else None,
@@ -530,7 +549,7 @@ def edit_student(enroll_no):
         face_embedding=face_embedding,
         metadata=metadata if metadata else None
     )
-    
+
     if success:
         return jsonify({'status': 'success', 'message': message})
     else:
@@ -553,18 +572,18 @@ def bulk_upload_students():
     excel_file = request.files.get('excel_file')
     if not excel_file:
         return jsonify({'status': 'error', 'message': 'No Excel file provided'}), 400
-    
+
     # Save Excel file temporarily
     import pandas as pd
     excel_path = os.path.join(config.UPLOADS_DIR, f"temp_{secrets.token_hex(8)}.xlsx")
     excel_file.save(excel_path)
-    
+
     try:
         df = pd.read_excel(excel_path)
         required_columns = ['enroll_no', 'name', 'class']
         if not all(col in df.columns for col in required_columns):
             return jsonify({'status': 'error', 'message': f'Excel must have columns: {", ".join(required_columns)}'}), 400
-        
+
         # Handle photos ZIP if provided
         photos_zip = request.files.get('photos_zip')
         photos_dict = {}
@@ -578,19 +597,19 @@ def bulk_upload_students():
                         enroll_no = os.path.splitext(os.path.basename(file))[0]
                         photos_dict[enroll_no] = os.path.join(config.UPLOADS_DIR, file)
             os.remove(zip_path)
-        
+
         # Process each row
         success_count = 0
         error_count = 0
         errors = []
-        
+
         for _, row in df.iterrows():
             enroll_no = str(row['enroll_no']).strip()
             name = str(row['name']).strip()
             class_name = str(row['class']).strip()
             photo_filename = str(row.get('photo_filename', '')).strip()
             metadata = str(row.get('metadata', '')).strip()
-            
+
             # Find photo
             photo_path = None
             if enroll_no in photos_dict:
@@ -599,19 +618,19 @@ def bulk_upload_students():
                 photo_path = os.path.join(config.UPLOADS_DIR, photo_filename)
                 if not os.path.exists(photo_path):
                     photo_path = None
-            
+
             if not photo_path or not os.path.exists(photo_path):
                 errors.append(f"{enroll_no}: Photo not found")
                 error_count += 1
                 continue
-            
+
             # Compute face embedding
             face_embedding = compute_face_embedding(photo_path)
             if face_embedding is None:
                 errors.append(f"{enroll_no}: No face detected in photo")
                 error_count += 1
                 continue
-            
+
             # Save photo with random UUID for security (non-guessable filename)
             file_ext = os.path.splitext(photo_path)[1] if '.' in photo_path else '.jpg'
             random_id = uuid.uuid4().hex
@@ -619,7 +638,7 @@ def bulk_upload_students():
             final_path = os.path.join(config.UPLOADS_DIR, final_filename)
             import shutil
             shutil.copy2(photo_path, final_path)
-            
+
             # Add student
             success, message = StudentModel.add(
                 enroll_no=enroll_no,
@@ -629,15 +648,15 @@ def bulk_upload_students():
                 face_embedding=face_embedding,
                 metadata=metadata
             )
-            
+
             if success:
                 success_count += 1
             else:
                 errors.append(f"{enroll_no}: {message}")
                 error_count += 1
-        
+
         os.remove(excel_path)
-        
+
         return jsonify({
             'status': 'success',
             'message': f'Processed {success_count} students successfully, {error_count} errors',
@@ -645,10 +664,16 @@ def bulk_upload_students():
             'error_count': error_count,
             'errors': errors[:10]  # Limit errors shown
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error processing bulk upload: {str(e)}", exc_info=True)
         error_msg = 'Error processing file. Please check the file format and try again.' if config.IS_PRODUCTION else str(e)
+        # Attempt to clean up temp file if it exists
+        try:
+            if os.path.exists(excel_path):
+                os.remove(excel_path)
+        except Exception:
+            pass
         return jsonify({'status': 'error', 'message': error_msg}), 500
 
 @main_bp.route('/api/attendance', methods=['GET'])
@@ -658,7 +683,7 @@ def get_attendance():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     enroll_no = request.args.get('enroll_no')
-    
+
     filters = {}
     if date_from:
         filters['date_from'] = date_from
@@ -666,9 +691,9 @@ def get_attendance():
         filters['date_to'] = date_to
     if enroll_no:
         filters['enroll_no'] = enroll_no
-    
+
     records = AttendanceModel.get_all()
-    
+
     # Apply filters
     if filters:
         filtered = []
@@ -681,7 +706,7 @@ def get_attendance():
                 continue
             filtered.append(record)
         records = filtered
-    
+
     return jsonify({'status': 'success', 'records': records})
 
 @main_bp.route('/api/attendance/today', methods=['GET'])
@@ -708,7 +733,7 @@ def export_attendance():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     enroll_no = request.args.get('enroll_no')
-    
+
     filters = {}
     if date_from:
         filters['date_from'] = date_from
@@ -716,14 +741,14 @@ def export_attendance():
         filters['date_to'] = date_to
     if enroll_no:
         filters['enroll_no'] = enroll_no
-    
+
     df = AttendanceModel.export_filtered(filters)
-    
+
     # Create Excel in memory
     output = io.BytesIO()
     df.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
-    
+
     filename = f"attendance_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     as_attachment=True, download_name=filename)
@@ -734,10 +759,10 @@ def dashboard_stats():
     """Get dashboard statistics for charts"""
     import pandas as pd
     from datetime import datetime, timedelta
-    
+
     records = AttendanceModel.get_all()
     students = StudentModel.get_all()
-    
+
     # Calculate attendance percentage per student
     student_stats = []
     for student in students:
@@ -749,7 +774,7 @@ def dashboard_stats():
             'name': student.get('name', ''),
             'total_days': total_days
         })
-    
+
     # Monthly summary (last 6 months)
     monthly_stats = {}
     for record in records:
@@ -761,7 +786,7 @@ def dashboard_stats():
                 monthly_stats[month_key] = monthly_stats.get(month_key, 0) + 1
             except:
                 pass
-    
+
     return jsonify({
         'status': 'success',
         'student_stats': student_stats,
@@ -775,13 +800,13 @@ def feedback():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         message = request.form.get('message', '').strip()
-        
+
         if not name or not message:
             return jsonify({'status': 'error', 'message': 'Name and message are required'}), 400
-        
+
         FeedbackModel.add(name, message)
         return jsonify({'status': 'success', 'message': 'Feedback submitted successfully'})
-    
+
     return render_template('feedback.html')
 
 @main_bp.route('/student/register', methods=['GET', 'POST'])
@@ -794,17 +819,17 @@ def student_register():
         confirm_password = request.form.get('confirm_password', '')
         email = request.form.get('email', '').strip().lower()
         class_name = request.form.get('class', '').strip()
-        
+
         if not enroll_no or not name or not password:
             return jsonify({'status': 'error', 'message': 'Enrollment number, name, and password are required'}), 400
-        
+
         if password != confirm_password:
             return jsonify({'status': 'error', 'message': 'Passwords do not match'}), 400
-        
+
         is_valid, error_msg = validate_password(password)
         if not is_valid:
             return jsonify({'status': 'error', 'message': error_msg}), 400
-        
+
         existing_student = StudentModel.get_by_enroll(enroll_no)
         if existing_student:
             if existing_student.get('password_hash'):
@@ -815,13 +840,13 @@ def student_register():
                 if success:
                     with get_db() as conn:
                         cursor = conn.cursor()
-                        cursor.execute('UPDATE students SET password_hash = ?, email = ? WHERE enroll_no = ?', 
+                        cursor.execute('UPDATE students SET password_hash = ?, email = ? WHERE enroll_no = ?',
                                      (password_hash, email if email else None, enroll_no))
                         conn.commit()
                     app.logger.info(f"Student registered (existing record updated): {enroll_no}")
                     return jsonify({'status': 'success', 'message': 'Registration successful. Please login.'})
                 return jsonify({'status': 'error', 'message': message}), 400
-        
+
         password_hash = hash_password(password)
         success, message = StudentModel.add(
             enroll_no=enroll_no,
@@ -833,13 +858,13 @@ def student_register():
             email=email if email else None,
             metadata=''
         )
-        
+
         if success:
             app.logger.info(f"Student registered: {enroll_no}")
             return jsonify({'status': 'success', 'message': 'Registration successful. Please login.'})
         else:
             return jsonify({'status': 'error', 'message': message}), 400
-    
+
     return render_template('student_register.html')
 
 @main_bp.route('/student/login', methods=['GET', 'POST'])
@@ -848,28 +873,28 @@ def student_login():
     if request.method == 'POST':
         enroll_no = request.form.get('enroll_no', '').strip()
         password = request.form.get('password', '')
-        
+
         if not enroll_no or not password:
             return jsonify({'status': 'error', 'message': 'Enrollment number and password are required'}), 400
-        
+
         student = StudentModel.get_by_enroll(enroll_no)
         if not student:
             app.logger.warning(f"Student login attempt for non-existent enrollment: {enroll_no}")
             return jsonify({'status': 'error', 'message': 'Invalid enrollment number or password'}), 401
-        
+
         password_hash = student.get('password_hash')
         if not password_hash:
             return jsonify({'status': 'error', 'message': 'Account not activated. Please register first.'}), 401
-        
+
         if not verify_password(password, password_hash):
             app.logger.warning(f"Failed student login attempt for: {enroll_no}")
             return jsonify({'status': 'error', 'message': 'Invalid enrollment number or password'}), 401
-        
+
         student_user = StudentUser(enroll_no)
         flask_login_user(student_user, remember=True)
         app.logger.info(f"Student logged in: {enroll_no}")
         return jsonify({'status': 'success', 'message': 'Login successful', 'redirect': url_for('main.student_dashboard')})
-    
+
     return render_template('student_login.html')
 
 @main_bp.route('/student/logout')
@@ -887,12 +912,12 @@ def student_required(f):
             if request.is_json:
                 return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
             return redirect(url_for('main.student_login'))
-        
+
         if not hasattr(current_user, 'user_type') or current_user.user_type != 'student':
             if request.is_json:
                 return jsonify({'status': 'error', 'message': 'Student access required'}), 403
             return redirect(url_for('main.student_login'))
-        
+
         try:
             enroll_no = current_user.enroll_no
             student = StudentModel.get_by_enroll(enroll_no)
@@ -900,11 +925,11 @@ def student_required(f):
                 if request.is_json:
                     return jsonify({'status': 'error', 'message': 'Student access required'}), 403
                 return redirect(url_for('main.student_login'))
-        except:
+        except Exception:
             if request.is_json:
                 return jsonify({'status': 'error', 'message': 'Student access required'}), 403
             return redirect(url_for('main.student_login'))
-        
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -913,18 +938,18 @@ def student_required(f):
 def student_dashboard():
     """Student personal dashboard"""
     from chatbot_utils import compute_student_statistics
-    
+
     enroll_no = current_user.enroll_no
     stats = compute_student_statistics(enroll_no)
-    
+
     if not stats:
         return jsonify({'status': 'error', 'message': 'Student data not found'}), 404
-    
+
     student = stats['student']
-    
+
     if request.headers.get('Accept', '').startswith('text/html'):
         return render_template('student_dashboard.html')
-    
+
     return jsonify({
         'status': 'success',
         'student': {
@@ -978,13 +1003,19 @@ def unified_auth_api():
     department_code = (request.form.get("department_code") or "").strip()
 
     # Common validations
-    if not email or not username or not password:
-        return jsonify({"status": "error", "message": "Email, username and password are required"}), 400
+    # Require username & password for both login and register
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Username and password are required"}), 400
 
-    # Password rules
-    valid, msg = validate_password(password)
-    if not valid:
-        return jsonify({"status": "error", "message": msg}), 400
+    # Email is required for registration only
+    if mode == "register" and not email:
+        return jsonify({"status": "error", "message": "Email is required for registration"}), 400
+
+    # Password rules only enforced during registration
+    if mode == "register":
+        valid, msg = validate_password(password)
+        if not valid:
+            return jsonify({"status": "error", "message": msg}), 400
 
     # Registration-only validations
     if mode == "register":
@@ -1021,7 +1052,7 @@ def unified_auth_api():
                     cursor = conn.cursor()
                     cursor.execute(
                         "UPDATE students SET password_hash = ?, email = ? WHERE enroll_no = ?",
-                        (password_hash, email, str(enroll_no)),
+                        (password_hash, email if email else None, str(enroll_no)),
                     )
                     conn.commit()
                 app.logger.info(f"Student registered (existing record updated): {enroll_no}")
@@ -1135,35 +1166,35 @@ def chatbot_page():
 def chatbot_student_summary():
     """Admin-only chatbot endpoint for student statistical summary"""
     from chatbot_utils import get_student_by_enroll_or_name, compute_student_statistics, generate_gemini_summary
-    
+
     data = request.get_json()
     if not data:
         return jsonify({'status': 'error', 'message': 'Invalid request'}), 400
-    
+
     query = data.get('query', '').strip()
     if not query:
         return jsonify({'status': 'error', 'message': 'Student enrollment number or name is required'}), 400
-    
-    app.logger.info(f"Admin chatbot query from user '{current_user.username}': {query}")
-    
+
+    app.logger.info(f"Admin chatbot query from user '{getattr(current_user, 'username', 'unknown')}': {query}")
+
     student = get_student_by_enroll_or_name(query)
     if not student:
-        app.logger.warning(f"Student not found for query '{query}' by admin '{current_user.username}'")
+        app.logger.warning(f"Student not found for query '{query}' by admin '{getattr(current_user, 'username', 'unknown')}'")
         return jsonify({
             'status': 'error',
             'message': f'Student not found. Please check the enrollment number or name.'
         }), 404
-    
+
     enroll_no = student.get('enroll_no')
     stats = compute_student_statistics(enroll_no)
-    
+
     if not stats:
         return jsonify({'status': 'error', 'message': 'Error computing statistics'}), 500
-    
+
     summary = generate_gemini_summary(stats)
-    
-    app.logger.info(f"Admin '{current_user.username}' queried statistics for student '{enroll_no}'")
-    
+
+    app.logger.info(f"Admin '{getattr(current_user, 'username', 'unknown')}' queried statistics for student '{enroll_no}'")
+
     return jsonify({
         'status': 'success',
         'student': {
@@ -1194,12 +1225,14 @@ def uploaded_file(filename):
     # Additional security: sanitize filename to prevent directory traversal
     filename = secure_filename(filename)
     file_path = os.path.join(config.UPLOADS_DIR, filename)
-    
+
     # Ensure file exists and is within uploads directory (prevent directory traversal)
-    if not os.path.exists(file_path) or not os.path.abspath(file_path).startswith(os.path.abspath(config.UPLOADS_DIR)):
+    uploads_abspath = os.path.abspath(config.UPLOADS_DIR)
+    file_abspath = os.path.abspath(file_path)
+    if not os.path.exists(file_path) or not file_abspath.startswith(uploads_abspath):
         app.logger.warning(f"Unauthorized file access attempt: {filename} from user {request.remote_addr}")
         return jsonify({'status': 'error', 'message': 'File not found'}), 404
-    
+
     return send_file(file_path)
 
 # Redirect root to unified auth if not authenticated, otherwise dashboards
@@ -1231,7 +1264,7 @@ def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}", exc_info=True)
     if request.is_json:
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'An internal error occurred. Please try again later.' if config.IS_PRODUCTION else str(error)
         }), 500
     flash('An internal error occurred. Please try again later.' if config.IS_PRODUCTION else str(error), 'error')
@@ -1240,10 +1273,13 @@ def internal_error(error):
 @app.errorhandler(Exception)
 def handle_exception(error):
     """Handle all exceptions"""
+    # Preserve HTTP exceptions (so 404/401/etc. are not converted to 500)
+    if isinstance(error, HTTPException):
+        return error
     app.logger.error(f"Unhandled exception: {str(error)}", exc_info=True)
     if request.is_json:
         return jsonify({
-            'status': 'error', 
+            'status': 'error',
             'message': 'An error occurred. Please try again later.' if config.IS_PRODUCTION else str(error)
         }), 500
     flash('An error occurred. Please try again later.' if config.IS_PRODUCTION else str(error), 'error')
@@ -1251,21 +1287,18 @@ def handle_exception(error):
 
 if __name__ == "__main__":
     import sys
-    
+
     if config.IS_PRODUCTION:
         print("=" * 60)
         print("⚠️  WARNING: Running in PRODUCTION mode!")
         print("=" * 60)
-        print("For production deployment, use a WSGI server:")
+        print("This development server will not start in production mode.")
+        print("Use a WSGI server such as:")
         print("  Windows: waitress-serve --host=0.0.0.0 --port=5000 wsgi:app")
         print("  Linux:   gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app")
         print("=" * 60)
-        print()
-        response = input("Continue with development server? (NOT RECOMMENDED) [y/N]: ")
-        if response.lower() != 'y':
-            print("Exiting. Please use a production WSGI server.")
-            sys.exit(0)
-    
+        sys.exit(1)
+
     print("=" * 60)
     print("MarkSmart - Starting Development Server")
     print("=" * 60)
@@ -1278,11 +1311,10 @@ if __name__ == "__main__":
     print("\nPress Ctrl+C to stop the server")
     print("=" * 60)
     print()
-    
+
     app.run(
         debug=not config.IS_PRODUCTION,
         host=config.HOST,
         port=config.PORT,
         use_reloader=not config.IS_PRODUCTION
     )
-
