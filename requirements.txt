@@ -4,7 +4,7 @@ Flask-WTF==1.2.1
 Flask-Limiter==3.5.0
 qrcode==7.4.2
 
-numpy==1.25.2
+numpy==1.26
 pandas==2.0.3
 openpyxl==3.1.2
 
@@ -21,4 +21,5 @@ Pillow==10.3.0
 
 gunicorn==21.2.0
 google-generativeai==0.3.2
+
 
