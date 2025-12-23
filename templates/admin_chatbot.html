@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Chatbot - Student Statistics</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .chatbot-container { border: 1px solid #ddd; border-radius: 8px; padding: 20px; background: #f9f9f9; }
+        .chatbot-header { margin-bottom: 20px; color: #333; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .response-area { margin-top: 20px; padding: 15px; background: white; border: 1px solid #ddd; border-radius: 4px; min-height: 200px; }
+        .loading { color: #666; font-style: italic; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        .stats-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .stats-table th, .stats-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        .stats-table th { background-color: #f8f9fa; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="chatbot-container">
+        <h2 class="chatbot-header">Student Statistical Summary Chatbot</h2>
+        <p><strong>Option:</strong> Student Statistical Summary</p>
+        
+        <div class="input-group">
+            <label for="studentQuery">Enter Student Enrollment Number or Name:</label>
+            <input type="text" id="studentQuery" placeholder="e.g., 0131AD231023 or John Doe">
+        </div>
+        
+        <button class="btn" id="submitBtn" onclick="submitQuery()">Get Summary</button>
+        
+        <div class="response-area" id="responseArea">
+            <p style="color: #666;">Enter a student enrollment number or name to get their attendance statistics summary.</p>
+        </div>
+    </div>
+
+    <script>
+        function submitQuery() {
+            const query = document.getElementById('studentQuery').value.trim();
+            const responseArea = document.getElementById('responseArea');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (!query) {
+                responseArea.innerHTML = '<p class="error">Please enter a student enrollment number or name.</p>';
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            responseArea.innerHTML = '<p class="loading">Processing request...</p>';
+            
+            fetch('/api/admin/chatbot/student-summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                
+                if (data.status === 'success') {
+                    let html = '<div class="success">';
+                    html += '<h3>Student Information</h3>';
+                    html += '<p><strong>Name:</strong> ' + data.student.name + '</p>';
+                    html += '<p><strong>Enrollment Number:</strong> ' + data.student.enroll_no + '</p>';
+                    html += '<p><strong>Class:</strong> ' + data.student.class + '</p>';
+                    
+                    html += '<h3>Attendance Statistics</h3>';
+                    html += '<table class="stats-table">';
+                    html += '<tr><th>Metric</th><th>Value</th></tr>';
+                    html += '<tr><td>Total Days Present</td><td>' + data.statistics.total_days_present + '</td></tr>';
+                    html += '<tr><td>Total Days Absent</td><td>' + data.statistics.total_days_absent + '</td></tr>';
+                    html += '<tr><td>Total Days in Period</td><td>' + data.statistics.total_days_in_period + '</td></tr>';
+                    html += '<tr><td>Attendance Percentage</td><td>' + data.statistics.attendance_percentage + '%</td></tr>';
+                    html += '<tr><td>First Attendance Date</td><td>' + (data.statistics.first_attendance_date || 'N/A') + '</td></tr>';
+                    html += '<tr><td>Last Attendance Date</td><td>' + (data.statistics.last_attendance_date || 'N/A') + '</td></tr>';
+                    html += '</table>';
+                    
+                    if (Object.keys(data.statistics.monthly_breakdown).length > 0) {
+                        html += '<h3>Monthly Breakdown</h3><ul>';
+                        for (const [month, count] of Object.entries(data.statistics.monthly_breakdown)) {
+                            html += '<li>' + month + ': ' + count + ' day(s)</li>';
+                        }
+                        html += '</ul>';
+                    }
+                    
+                    html += '<h3>Summary</h3>';
+                    html += '<p>' + data.summary.replace(/\n/g, '<br>') + '</p>';
+                    html += '</div>';
+                    
+                    responseArea.innerHTML = html;
+                } else {
+                    responseArea.innerHTML = '<p class="error">Error: ' + (data.message || 'Unknown error') + '</p>';
+                }
+            })
+            .catch(error => {
+                submitBtn.disabled = false;
+                responseArea.innerHTML = '<p class="error">Network error. Please try again.</p>';
+                console.error('Error:', error);
+            });
+        }
+        
+        document.getElementById('studentQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitQuery();
+            }
+        });
+    </script>
+</body>
+</html>
+

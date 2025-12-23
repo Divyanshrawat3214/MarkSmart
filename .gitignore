@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv311/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Database (keep structure, but not data in production)
+# Uncomment if you want to exclude DB file:
+# data/*.db
+
+# Generated files (will be recreated)
+static/qr_codes/*.png
+uploads/*.jpeg
+uploads/*.jpg
+uploads/*.png
+
+# Backups
+backups/
+*.zip
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+

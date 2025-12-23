@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Login - MarkSmart{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header">
+                <h4 class="mb-0">MarkSmart - Sign In</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('auth.login') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mb-3">Sign In</button>
+                </form>
+                <div class="text-center">
+                    <small class="text-muted">
+                        <a href="{{ url_for('auth.forgot_password') }}">Forgot Password?</a>
+                    </small>
+                </div>
+                <div class="text-center mt-2">
+                    <small class="text-muted">Don't have an account? <a href="{{ url_for('auth.register') }}">Sign Up</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scan to Mark Attendance</title>
+<style>video{border:1px solid #ddd; width:320px; height:240px}</style>
+</head>
+<body>
+<h2>Scan and mark attendance</h2>
+<video id="video" autoplay playsinline></video>
+<br>
+<button id="snap">Capture & Send</button>
+<p id="status"></p>
+
+
+<script>
+const video = document.getElementById('video');
+const status = document.getElementById('status');
+const token = "{{token}}";
+let currentLatitude = null;
+let currentLongitude = null;
+let locationReady = false;
+
+async function requestLocation(){
+if(!navigator.geolocation){
+status.innerText = 'Location services are not available in your browser.';
+return;
+}
+try{
+const position = await new Promise((resolve, reject)=>{
+navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy: true, timeout: 10000, maximumAge: 0});
+});
+currentLatitude = position.coords.latitude;
+currentLongitude = position.coords.longitude;
+locationReady = true;
+status.innerText = 'Location captured. Ready to mark attendance.';
+}catch(error){
+locationReady = false;
+if(error.code === error.PERMISSION_DENIED){
+status.innerText = 'Location permission denied. Please enable location access to mark attendance.';
+}else if(error.code === error.POSITION_UNAVAILABLE){
+status.innerText = 'Location unavailable. Please check your device settings and try again.';
+}else if(error.code === error.TIMEOUT){
+status.innerText = 'Location request timed out. Please try again.';
+}else{
+status.innerText = 'Location error: ' + error.message;
+}
+}
+}
+requestLocation();
+
+async function startCam(){
+try{
+const stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+video.srcObject = stream;
+}catch(e){ status.innerText = 'Camera access required to mark attendance.' }
+}
+startCam();
+
+document.getElementById('snap').onclick = async ()=>{
+if(!locationReady || currentLatitude === null || currentLongitude === null){
+status.innerText = 'Location is required. Please allow location access and try again.';
+return;
+}
+const canvas = document.createElement('canvas');
+canvas.width = video.videoWidth || 320; canvas.height = video.videoHeight || 240;
+canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+canvas.toBlob(async (blob)=>{
+const fd = new FormData();
+fd.append('photo', blob, 'capture.jpg');
+fd.append('token', token);
+fd.append('latitude', currentLatitude.toString());
+fd.append('longitude', currentLongitude.toString());
+fd.append('liveness_passed', 'true');
+fd.append('liveness_score', '1.0');
+status.innerText = 'Uploading...';
+const res = await fetch('/api/attendance/verify', {method: 'POST', body: fd});
+const j = await res.json();
+if(res.ok){ status.innerText = `Marked: ${j.student_name || j.message} at ${j.time || ''}` } else { status.innerText = `Error: ${j.message}` }
+}, 'image/jpeg', 0.9);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - MarkSmart</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f5f5; padding: 20px 0; }
+        .dashboard-container { max-width: 900px; margin: 0 auto; }
+        .stats-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .stat-item { padding: 10px 0; border-bottom: 1px solid #eee; }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-label { font-weight: bold; color: #666; }
+        .stat-value { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container dashboard-container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Student Dashboard</h2>
+            <a href="{{ url_for('main.student_logout') }}" class="btn btn-outline-danger">Logout</a>
+        </div>
+        
+        <div id="loading" class="text-center">Loading...</div>
+        <div id="error" class="alert alert-danger d-none"></div>
+        <div id="dashboardContent" class="d-none">
+            <div class="stats-card">
+                <h4>Student Information</h4>
+                <div class="stat-item">
+                    <span class="stat-label">Name:</span>
+                    <span class="stat-value" id="studentName"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Enrollment Number:</span>
+                    <span class="stat-value" id="studentEnroll"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Class:</span>
+                    <span class="stat-value" id="studentClass"></span>
+                </div>
+            </div>
+            
+            <div class="stats-card">
+                <h4>Attendance Statistics</h4>
+                <div class="stat-item">
+                    <span class="stat-label">Total Days Present:</span>
+                    <span class="stat-value" id="daysPresent"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Days Absent:</span>
+                    <span class="stat-value" id="daysAbsent"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Days in Period:</span>
+                    <span class="stat-value" id="totalDays"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Attendance Percentage:</span>
+                    <span class="stat-value" id="attendancePercent"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">First Attendance Date:</span>
+                    <span class="stat-value" id="firstDate"></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Last Attendance Date:</span>
+                    <span class="stat-value" id="lastDate"></span>
+                </div>
+            </div>
+            
+            <div class="stats-card" id="monthlyCard" style="display: none;">
+                <h4>Monthly Breakdown</h4>
+                <ul id="monthlyList"></ul>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function loadDashboard() {
+            try {
+                const response = await fetch('{{ url_for("student_dashboard") }}');
+                const data = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                if (data.status === 'success') {
+                    document.getElementById('studentName').textContent = data.student.name;
+                    document.getElementById('studentEnroll').textContent = data.student.enroll_no;
+                    document.getElementById('studentClass').textContent = data.student.class || 'N/A';
+                    document.getElementById('daysPresent').textContent = data.statistics.total_days_present;
+                    document.getElementById('daysAbsent').textContent = data.statistics.total_days_absent;
+                    document.getElementById('totalDays').textContent = data.statistics.total_days_in_period;
+                    document.getElementById('attendancePercent').textContent = data.statistics.attendance_percentage + '%';
+                    document.getElementById('firstDate').textContent = data.statistics.first_attendance_date || 'N/A';
+                    document.getElementById('lastDate').textContent = data.statistics.last_attendance_date || 'N/A';
+                    
+                    const monthlyBreakdown = data.statistics.monthly_breakdown;
+                    if (Object.keys(monthlyBreakdown).length > 0) {
+                        const monthlyList = document.getElementById('monthlyList');
+                        monthlyList.innerHTML = '';
+                        for (const [month, count] of Object.entries(monthlyBreakdown)) {
+                            const li = document.createElement('li');
+                            li.textContent = month + ': ' + count + ' day(s)';
+                            monthlyList.appendChild(li);
+                        }
+                        document.getElementById('monthlyCard').style.display = 'block';
+                    }
+                    
+                    document.getElementById('dashboardContent').classList.remove('d-none');
+                } else {
+                    document.getElementById('error').textContent = data.message || 'Error loading dashboard';
+                    document.getElementById('error').classList.remove('d-none');
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').textContent = 'Network error. Please try again.';
+                document.getElementById('error').classList.remove('d-none');
+            }
+        }
+        loadDashboard();
+    </script>
+</body>
+</html>
+

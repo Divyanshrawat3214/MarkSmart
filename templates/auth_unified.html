@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Unified Auth - MarkSmart{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-5 col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Authentication</h5>
+                <span class="badge bg-secondary" id="roleLabel">Select user</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Who is using?</label>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-primary flex-fill" id="roleStudentBtn">
+                            Student
+                        </button>
+                        <button type="button" class="btn btn-outline-primary flex-fill" id="roleAdminBtn">
+                            Admin
+                        </button>
+                    </div>
+                    <small class="text-muted d-block mt-1">Please select who is using the system.</small>
+                </div>
+
+                <div class="d-flex justify-content-between mb-3">
+                    <div class="btn-group" role="group" aria-label="Mode toggle">
+                        <button type="button" class="btn btn-sm btn-primary" id="modeLoginBtn">Login</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="modeRegisterBtn">Register</button>
+                    </div>
+                </div>
+
+                <form id="authForm" class="d-none">
+                    <input type="hidden" name="csrf_token" id="csrfTokenInput" value="{{ csrf_token() }}">
+                    <input type="hidden" name="role" id="roleInput" value="">
+                    <input type="hidden" name="mode" id="modeInput" value="login">
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+
+                    <div class="mb-3" id="usernameGroup">
+                        <label for="username" class="form-label" id="usernameLabel">Enrollment Number</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                        <div class="form-text text-white" id="usernameHelp">Use your enrollment number as username.</div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="departmentGroup">
+                        <label for="department_code" class="form-label">Department Code</label>
+                        <input type="text" class="form-control" id="department_code" name="department_code">
+                        <div class="form-text text-white">Required for admin login and registration.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                        <div class="form-text text-white">
+                            8–16 chars, at least 1 uppercase, 1 lowercase, 1 digit, 1 special (!@#$%^&*(),.?":{}|&lt;&gt;).
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="confirmPasswordGroup">
+                        <label for="confirm_password" class="form-label">Confirm Password</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password">
+                    </div>
+
+                    <div id="authError" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="authSuccess" class="alert alert-success d-none" role="alert"></div>
+
+                    <button type="submit" class="btn btn-primary w-100" id="submitBtn">Login</button>
+                </form>
+
+                <div class="mt-3 text-center">
+                    <small class="text-muted">
+                        Forgot admin password? Use
+                        <a href="{{ url_for('auth.forgot_password') }}">Forgot Password</a>.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const roleInput = document.getElementById('roleInput');
+        const modeInput = document.getElementById('modeInput');
+        const roleLabel = document.getElementById('roleLabel');
+        const roleStudentBtn = document.getElementById('roleStudentBtn');
+        const roleAdminBtn = document.getElementById('roleAdminBtn');
+        const modeLoginBtn = document.getElementById('modeLoginBtn');
+        const modeRegisterBtn = document.getElementById('modeRegisterBtn');
+        const usernameLabel = document.getElementById('usernameLabel');
+        const usernameHelp = document.getElementById('usernameHelp');
+        const departmentGroup = document.getElementById('departmentGroup');
+        const confirmPasswordGroup = document.getElementById('confirmPasswordGroup');
+        const authForm = document.getElementById('authForm');
+        const authError = document.getElementById('authError');
+        const authSuccess = document.getElementById('authSuccess');
+        const submitBtn = document.getElementById('submitBtn');
+        const whoIsUsingLabel = document.getElementById('roleLabel');
+
+        function setRole(role) {
+            roleInput.value = role;
+            roleLabel.textContent = role === 'student' ? 'Student' : 'Admin';
+
+            // Show form only after a role is selected
+            authForm.classList.remove('d-none');
+
+            if (role === 'student') {
+                roleStudentBtn.classList.add('btn-primary');
+                roleStudentBtn.classList.remove('btn-outline-primary');
+                roleAdminBtn.classList.remove('btn-primary');
+                roleAdminBtn.classList.add('btn-outline-primary');
+                usernameLabel.textContent = 'Enrollment Number';
+                usernameHelp.textContent = 'Use your enrollment number as username.';
+                departmentGroup.classList.add('d-none');
+            } else {
+                roleAdminBtn.classList.add('btn-primary');
+                roleAdminBtn.classList.remove('btn-outline-primary');
+                roleStudentBtn.classList.remove('btn-primary');
+                roleStudentBtn.classList.add('btn-outline-primary');
+                usernameLabel.textContent = 'Admin Username';
+                usernameHelp.textContent = 'Use your admin username.';
+                departmentGroup.classList.remove('d-none');
+            }
+        }
+
+        function setMode(mode) {
+            modeInput.value = mode;
+            if (mode === 'login') {
+                modeLoginBtn.classList.add('btn-primary');
+                modeLoginBtn.classList.remove('btn-outline-primary');
+                modeRegisterBtn.classList.remove('btn-primary');
+                modeRegisterBtn.classList.add('btn-outline-primary');
+                confirmPasswordGroup.classList.add('d-none');
+                submitBtn.textContent = 'Login';
+            } else {
+                modeRegisterBtn.classList.add('btn-primary');
+                modeRegisterBtn.classList.remove('btn-outline-primary');
+                modeLoginBtn.classList.remove('btn-primary');
+                modeLoginBtn.classList.add('btn-outline-primary');
+                confirmPasswordGroup.classList.remove('d-none');
+                submitBtn.textContent = 'Register';
+            }
+        }
+
+        function clearMessages() {
+            authError.classList.add('d-none');
+            authSuccess.classList.add('d-none');
+        }
+
+        function showError(message) {
+            authSuccess.classList.add('d-none');
+            authError.textContent = message || 'Something went wrong.';
+            authError.classList.remove('d-none');
+        }
+
+        function showSuccess(message) {
+            authError.classList.add('d-none');
+            authSuccess.textContent = message || 'Success.';
+            authSuccess.classList.remove('d-none');
+        }
+
+        function isPasswordStrong(pw) {
+            if (!pw || pw.length < 8 || pw.length > 16) return false;
+            if (!/[A-Z]/.test(pw)) return false;
+            if (!/[a-z]/.test(pw)) return false;
+            if (!/[0-9]/.test(pw)) return false;
+            if (!/[!@#$%^&*(),.?":{}|<>]/.test(pw)) return false;
+            return true;
+        }
+
+        roleStudentBtn.addEventListener('click', function () { setRole('student'); clearMessages(); });
+        roleAdminBtn.addEventListener('click', function () { setRole('admin'); clearMessages(); });
+        modeLoginBtn.addEventListener('click', function () { setMode('login'); clearMessages(); });
+        modeRegisterBtn.addEventListener('click', function () { setMode('register'); clearMessages(); });
+
+        authForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            clearMessages();
+
+            if (!roleInput.value) {
+                showError('Please select who is using the system (Student or Admin).');
+                return;
+            }
+
+            const formData = new FormData(authForm);
+            const password = formData.get('password') || '';
+            const mode = formData.get('mode') || 'login';
+
+            if (!isPasswordStrong(password)) {
+                showError('Password must be 8–16 characters and include upper, lower, digit, and special character.');
+                return;
+            }
+
+            if (mode === 'register') {
+                const cpw = formData.get('confirm_password') || '';
+                if (password !== cpw) {
+                    showError('Passwords do not match.');
+                    return;
+                }
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Please wait...';
+
+            try {
+                const response = await fetch('{{ url_for("unified_auth_api") }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: new URLSearchParams(formData)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    showSuccess(result.message || 'Success');
+                    if (result.redirect) {
+                        window.location.href = result.redirect;
+                    }
+                } else {
+                    showError(result.message || 'Authentication failed.');
+                }
+            } catch (err) {
+                showError('Network or server error. Please try again.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = mode === 'login' ? 'Login' : 'Register';
+            }
+        });
+
+        // Initial state: no role selected, form hidden, login mode
+        setMode('login');
+    })();
+</script>
+{% endblock %}
+
+

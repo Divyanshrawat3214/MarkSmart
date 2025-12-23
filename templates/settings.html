@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - MarkSmart{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Account Settings</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Current username: <strong>{{ current_user.username }}</strong></p>
+            </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Change Password</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('auth.settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="action" value="change_password"/>
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current Password *</label>
+                        <input type="password" class="form-control" id="current_password" name="current_password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">New Password *</label>
+                        <input type="password" class="form-control" id="new_password" name="new_password" required minlength="6">
+                        <small class="form-text text-muted">Password must be at least 6 characters long</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirm New Password *</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required minlength="6">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Change Password</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Change Username -->
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">Change Username</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('auth.settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="action" value="change_username"/>
+                    <div class="mb-3">
+                        <label for="current_password_username" class="form-label">Current Password *</label>
+                        <input type="password" class="form-control" id="current_password_username" name="current_password_username" required>
+                        <small class="form-text text-muted">Enter your current password to verify</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_username" class="form-label">New Username *</label>
+                        <input type="text" class="form-control" id="new_username" name="new_username" required>
+                        <small class="form-text text-muted">Choose a new username (must be different from current)</small>
+                    </div>
+                    <div class="alert alert-warning">
+                        <strong>Note:</strong> After changing your username, you will be logged out and need to log in again with your new username.
+                    </div>
+                    <button type="submit" class="btn btn-warning">Change Username</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
