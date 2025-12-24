@@ -12,7 +12,7 @@ import bcrypt
 import shutil
 import pandas as pd
 from flask import Flask, Blueprint, render_template, request, send_file, jsonify, redirect, url_for, flash
-from flask_wtf. csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
@@ -38,13 +38,13 @@ app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
 app.config['SESSION_COOKIE_HTTPONLY'] = config.SESSION_COOKIE_HTTPONLY
 app.config['SESSION_COOKIE_SECURE'] = config.SESSION_COOKIE_SECURE
 app.config['SESSION_COOKIE_SAMESITE'] = config.SESSION_COOKIE_SAMESITE
-app. config['PERMANENT_SESSION_LIFETIME'] = config.PERMANENT_SESSION_LIFETIME
+app.config['PERMANENT_SESSION_LIFETIME'] = config.PERMANENT_SESSION_LIFETIME
 app.config['PREFERRED_URL_SCHEME'] = config.PREFERRED_URL_SCHEME
 app.config['JSON_SORT_KEYS'] = False
 
-# Production security:  Disable debug mode
+# Production security: Disable debug mode
 if config.IS_PRODUCTION:
-    app. config['DEBUG'] = False
+    app.config['DEBUG'] = False
     app.config['TESTING'] = False
 
 # Initialize CSRF protection
@@ -79,8 +79,8 @@ init_auth(app)
 def load_user(user_id):
     """Load user from session"""
     try:
-        if user_id. startswith("student:"):
-            enroll_no = user_id. split(":", 1)[1]
+        if user_id.startswith("student:"):
+            enroll_no = user_id.split(":", 1)[1]
             student = StudentModel.get_by_enroll(enroll_no)
             if student and student.get('password_hash'):
                 return StudentUser(enroll_no)
@@ -90,7 +90,7 @@ def load_user(user_id):
             if user: 
                 return User(user_id)
     except Exception as e:
-        app.logger.error(f"Error loading user:  {str(e)}")
+        app.logger.error(f"Error loading user: {str(e)}")
     return None
 
 # Add security headers middleware
@@ -128,7 +128,7 @@ def set_security_headers(response):
 def force_https():
     """Force HTTPS redirection in production"""
     if config.IS_PRODUCTION and not request.is_secure:
-        host = request.host. split(':', 1)[0]
+        host = request.host.split(':', 1)[0]
         if host in ('localhost', '127.0.0.1'):
             return None
 
@@ -150,9 +150,9 @@ def admin_required(f):
             return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
         
         if not hasattr(current_user, 'username'):
-            return jsonify({'status':  'error', 'message':  'Admin access required'}), 403
+            return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
         
-        username = current_user.username. lower()
+        username = current_user.username.lower()
         admin_usernames = getattr(config, 'ADMIN_USERNAMES', [])
         if not admin_usernames or username not in admin_usernames:
             app.logger.warning(f"Non-admin user '{current_user.username}' attempted admin endpoint")
@@ -214,7 +214,8 @@ def generate_qr():
     if request.method == 'POST': 
         try:
             token = generate_qr_token()
-            qr_data = f"{request.url_root}scan? token={token}"
+            # FIX 1: Removed space after 'scan?'
+            qr_data = f"{request.url_root}scan?token={token}"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
             qr.add_data(qr_data)
@@ -237,7 +238,7 @@ def generate_qr():
                 'expires_in': expiry_minutes * 60
             })
         except Exception as e:
-            app. logger.error(f"Error generating QR code: {str(e)}")
+            app.logger.error(f"Error generating QR code: {str(e)}")
             return jsonify({'status': 'error', 'message': 'Failed to generate QR code'}), 500
     
     return render_template('qr_generate.html')
@@ -245,9 +246,9 @@ def generate_qr():
 @app.route('/scan')
 def scan():
     """Scan page - verify token and show camera (public route)"""
-    token = request. args.get('token')
+    token = request.args.get('token')
     if not token:
-        return render_template('scan.html', error='No token provided.  Please scan the QR code. ', token=None)
+        return render_template('scan.html', error='No token provided. Please scan the QR code.', token=None)
     
     payload = verify_qr_token(token)
     if not payload: 
@@ -262,7 +263,7 @@ def verify_attendance():
     """Verify attendance with face recognition and liveness"""
     if config.IS_PRODUCTION:
         origin = request.headers.get('Origin') or request.headers.get('Referer', '')
-        if origin and not origin.startswith(request.url_root. rstrip('/')):
+        if origin and not origin.startswith(request.url_root.rstrip('/')):
             app.logger.warning(f"Invalid origin attempt from {get_remote_address()}: {origin}")
     
     token = request.form.get('token')
@@ -272,13 +273,13 @@ def verify_attendance():
     
     payload = verify_qr_token(token)
     if not payload: 
-        return jsonify({'status':  'error', 'message':  'Invalid or expired token'}), 400
+        return jsonify({'status': 'error', 'message': 'Invalid or expired token'}), 400
     
     liveness_passed = request.form.get('liveness_passed', 'false').lower() == 'true'
     liveness_score = request.form.get('liveness_score', '0')
     
     if not liveness_passed: 
-        return jsonify({'status':  'error', 'message':  'Liveness check failed'}), 400
+        return jsonify({'status': 'error', 'message': 'Liveness check failed'}), 400
     
     latitude = request.form.get('latitude')
     longitude = request.form.get('longitude')
@@ -318,7 +319,7 @@ def verify_attendance():
         }), 400
     
     try:
-        npimg = np.frombuffer(img_bytes, dtype=np. uint8)
+        npimg = np.frombuffer(img_bytes, dtype=np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
         if img is None:
             return jsonify({'status': 'error', 'message': 'Could not decode image'}), 400
@@ -337,7 +338,7 @@ def verify_attendance():
 
     try:
         faces = face_recognition.face_locations(rgb)
-        app.logger.info(f"Face detection:  Found {len(faces)} face(s)")
+        app.logger.info(f"Face detection: Found {len(faces)} face(s)")
         
         if len(faces) > 1:
             app.logger.warning(f"Multiple faces detected ({len(faces)})")
@@ -356,7 +357,7 @@ def verify_attendance():
             }), 400
     except Exception as e:
         app.logger.error(f"Error during face detection: {str(e)}", exc_info=not config.IS_PRODUCTION)
-        return jsonify({'status': 'error', 'message': 'Face detection error.  Please try again.'}), 500
+        return jsonify({'status': 'error', 'message': 'Face detection error. Please try again.'}), 500
     
     try:
         student_embeddings, student_names, student_enrolls = StudentModel.get_all_embeddings()
@@ -394,7 +395,7 @@ def verify_attendance():
         except Exception as ex:
             app.logger.error(f"Error during face comparison: {str(ex)}", exc_info=not config.IS_PRODUCTION)
             return jsonify({
-                'status':  'error',
+                'status': 'error',
                 'message': 'Face recognition error. Please try again.'
             }), 500
     
@@ -437,13 +438,13 @@ def verify_attendance():
             liveness_score=liveness_score
         )
     except Exception as e:
-        app.logger.error(f"Error adding attendance:  {str(e)}")
+        app.logger.error(f"Error adding attendance: {str(e)}")
         return jsonify({'status': 'error', 'message': 'Failed to save attendance'}), 500
     
     return jsonify({
         'status': 'success',
         'message': f'Attendance marked successfully for {match_name}',
-        'student_name':  match_name,
+        'student_name': match_name,
         'enroll_no': match_enroll,
         'time': time_str
     })
@@ -453,36 +454,36 @@ def verify_attendance():
 def get_students():
     """Get all students"""
     try:
-        students = StudentModel. get_all()
+        students = StudentModel.get_all()
         return jsonify({'status': 'success', 'students': students})
     except Exception as e:
         app.logger.error(f"Error retrieving students: {str(e)}")
-        return jsonify({'status':  'error', 'message':  'Failed to retrieve students'}), 500
+        return jsonify({'status': 'error', 'message': 'Failed to retrieve students'}), 500
 
-@main_bp. route('/api/students/add', methods=['POST'])
+@main_bp.route('/api/students/add', methods=['POST'])
 @login_required
 def add_student():
     """Add new student"""
     try:
-        enroll_no = request.form. get('enroll_no', '').strip()
+        enroll_no = request.form.get('enroll_no', '').strip()
         name = request.form.get('name', '').strip()
         class_name = request.form.get('class', '').strip()
         metadata = request.form.get('metadata', '').strip()
         
         if not enroll_no or not name or not class_name: 
-            return jsonify({'status':  'error', 'message':  'Missing required fields'}), 400
+            return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
         
         photo = request.files.get('photo')
         if not photo: 
             return jsonify({'status': 'error', 'message': 'Photo is required'}), 400
         
         if not allowed_file(photo.filename):
-            return jsonify({'status':  'error', 'message':  'Invalid file type'}), 400
+            return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
         
         uploads_dir = getattr(config, 'UPLOADS_DIR', 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
-        file_ext = os.path.splitext(photo. filename)[1] if '.' in photo.filename else '. jpg'
+        file_ext = os.path.splitext(photo.filename)[1] if '.' in photo.filename else '.jpg'
         random_id = uuid.uuid4().hex
         filename = secure_filename(f"{enroll_no}_{random_id}{file_ext}")
         photo_path = os.path.join(uploads_dir, filename)
@@ -510,8 +511,8 @@ def add_student():
                 os.remove(photo_path)
             return jsonify({'status': 'error', 'message': message}), 400
     except Exception as e:
-        app. logger.error(f"Error adding student: {str(e)}")
-        return jsonify({'status':  'error', 'message':  'Failed to add student'}), 500
+        app.logger.error(f"Error adding student: {str(e)}")
+        return jsonify({'status': 'error', 'message': 'Failed to add student'}), 500
 
 @main_bp.route('/api/students/edit/<enroll_no>', methods=['POST'])
 @login_required
@@ -530,16 +531,16 @@ def edit_student(enroll_no):
             uploads_dir = getattr(config, 'UPLOADS_DIR', 'uploads')
             os.makedirs(uploads_dir, exist_ok=True)
             
-            file_ext = os.path. splitext(photo.filename)[1] if '.' in photo.filename else '.jpg'
+            file_ext = os.path.splitext(photo.filename)[1] if '.' in photo.filename else '.jpg'
             random_id = uuid.uuid4().hex
             filename = secure_filename(f"{enroll_no}_{random_id}{file_ext}")
-            photo_path = os. path.join(uploads_dir, filename)
+            photo_path = os.path.join(uploads_dir, filename)
             photo.save(photo_path)
             photo_filename = filename
             face_embedding = compute_face_embedding(photo_path)
             
             if face_embedding is None:
-                if os.path. exists(photo_path):
+                if os.path.exists(photo_path):
                     os.remove(photo_path)
                 return jsonify({'status': 'error', 'message': 'Could not detect face in photo'}), 400
         
@@ -569,9 +570,9 @@ def delete_student(enroll_no):
         if success:
             return jsonify({'status': 'success', 'message': message})
         else:
-            return jsonify({'status':  'error', 'message':  message}), 400
+            return jsonify({'status': 'error', 'message': message}), 400
     except Exception as e:
-        app. logger.error(f"Error deleting student: {str(e)}")
+        app.logger.error(f"Error deleting student: {str(e)}")
         return jsonify({'status': 'error', 'message': 'Failed to delete student'}), 500
 
 @main_bp.route('/api/students/bulk_upload', methods=['POST'])
@@ -592,7 +593,7 @@ def bulk_upload_students():
         df = pd.read_excel(excel_path)
         required_columns = ['enroll_no', 'name', 'class']
         if not all(col in df.columns for col in required_columns):
-            return jsonify({'status': 'error', 'message': f'Excel must have columns:  {", ".join(required_columns)}'}), 400
+            return jsonify({'status': 'error', 'message': f'Excel must have columns: {", ".join(required_columns)}'}), 400
         
         photos_zip = request.files.get('photos_zip')
         photos_dict = {}
@@ -602,9 +603,9 @@ def bulk_upload_students():
             photos_zip.save(zip_path)
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref. extractall(uploads_dir)
+                    zip_ref.extractall(uploads_dir)
                     for file in zip_ref.namelist():
-                        if file.lower().endswith(('.jpg', '. jpeg', '.png')):
+                        if file.lower().endswith(('.jpg', '.jpeg', '.png')):
                             enroll_no_from_zip = os.path.splitext(os.path.basename(file))[0]
                             photos_dict[enroll_no_from_zip] = os.path.join(uploads_dir, file)
             except zipfile.BadZipFile:
@@ -618,7 +619,7 @@ def bulk_upload_students():
             enroll_no = str(row['enroll_no']).strip()
             name = str(row['name']).strip()
             class_name = str(row['class']).strip()
-            photo_filename = str(row. get('photo_filename', '')).strip()
+            photo_filename = str(row.get('photo_filename', '')).strip()
             metadata = str(row.get('metadata', '')).strip()
             
             photo_path = None
@@ -636,7 +637,7 @@ def bulk_upload_students():
             
             face_embedding = compute_face_embedding(photo_path)
             if face_embedding is None:
-                errors.append(f"{enroll_no}:  No face detected in photo")
+                errors.append(f"{enroll_no}: No face detected in photo")
                 error_count += 1
                 continue
             
@@ -677,7 +678,7 @@ def bulk_upload_students():
             'message': f'Processed {success_count} students, {error_count} errors',
             'success_count': success_count,
             'error_count': error_count,
-            'errors': errors[: 10]
+            'errors': errors[:10]
         })
         
     except Exception as e: 
@@ -694,7 +695,7 @@ def get_attendance():
     try:
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
-        enroll_no = request.args. get('enroll_no')
+        enroll_no = request.args.get('enroll_no')
         
         filters = {}
         if date_from:
@@ -709,9 +710,9 @@ def get_attendance():
         if filters: 
             filtered = []
             for record in records: 
-                if 'date_from' in filters and record. get('date', '') < filters['date_from']:
+                if 'date_from' in filters and record.get('date', '') < filters['date_from']:
                     continue
-                if 'date_to' in filters and record. get('date', '') > filters['date_to']:
+                if 'date_to' in filters and record.get('date', '') > filters['date_to']:
                     continue
                 if 'enroll_no' in filters and record.get('enroll_no', '') != filters['enroll_no']: 
                     continue
@@ -721,9 +722,9 @@ def get_attendance():
         return jsonify({'status': 'success', 'records': records})
     except Exception as e:
         app.logger.error(f"Error retrieving attendance: {str(e)}")
-        return jsonify({'status':  'error', 'message':  'Failed to retrieve attendance'}), 500
+        return jsonify({'status': 'error', 'message': 'Failed to retrieve attendance'}), 500
 
-@main_bp. route('/api/attendance/today', methods=['GET'])
+@main_bp.route('/api/attendance/today', methods=['GET'])
 @login_required
 def get_today_attendance():
     """Get today's attendance"""
@@ -731,7 +732,7 @@ def get_today_attendance():
         records = AttendanceModel.get_today()
         return jsonify({'status': 'success', 'records': records, 'count': len(records)})
     except Exception as e:
-        app.logger.error(f"Error retrieving attendance:  {str(e)}")
+        app.logger.error(f"Error retrieving attendance: {str(e)}")
         return jsonify({'status': 'error', 'message': 'Failed to retrieve attendance'}), 500
 
 @main_bp.route('/api/attendance/delete/<int:index>', methods=['POST'])
@@ -755,7 +756,7 @@ def export_attendance():
     try:
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
-        enroll_no = request.args. get('enroll_no')
+        enroll_no = request.args.get('enroll_no')
         
         filters = {}
         if date_from:
@@ -789,7 +790,7 @@ def dashboard_stats():
         student_stats = []
         for student in students: 
             enroll_no = student.get('enroll_no', '')
-            student_records = [r for r in records if r. get('enroll_no') == enroll_no]
+            student_records = [r for r in records if r.get('enroll_no') == enroll_no]
             total_days = len(set([r.get('date') for r in student_records]))
             student_stats.append({
                 'enroll_no': enroll_no,
@@ -811,7 +812,7 @@ def dashboard_stats():
         return jsonify({
             'status': 'success',
             'student_stats': student_stats,
-            'monthly_stats':  monthly_stats
+            'monthly_stats': monthly_stats
         })
     except Exception as e:
         app.logger.error(f"Error computing stats: {str(e)}")
@@ -827,12 +828,12 @@ def feedback():
             message = request.form.get('message', '').strip()
             
             if not name or not message: 
-                return jsonify({'status':  'error', 'message':  'Name and message required'}), 400
+                return jsonify({'status': 'error', 'message': 'Name and message required'}), 400
             
             FeedbackModel.add(name, message)
             return jsonify({'status': 'success', 'message': 'Feedback submitted'})
         except Exception as e:
-            app.logger.error(f"Error submitting feedback:  {str(e)}")
+            app.logger.error(f"Error submitting feedback: {str(e)}")
             return jsonify({'status': 'error', 'message': 'Failed to submit feedback'}), 500
     
     return render_template('feedback.html')
@@ -840,9 +841,9 @@ def feedback():
 @main_bp.route('/student/register', methods=['GET', 'POST'])
 def student_register():
     """Student self-registration"""
-    if request. method == 'POST':
+    if request.method == 'POST':
         try:
-            enroll_no = request.form. get('enroll_no', '').strip()
+            enroll_no = request.form.get('enroll_no', '').strip()
             name = request.form.get('name', '').strip()
             password = request.form.get('password', '')
             confirm_password = request.form.get('confirm_password', '')
@@ -850,7 +851,7 @@ def student_register():
             class_name = request.form.get('class', '').strip()
             
             if not enroll_no or not name or not password: 
-                return jsonify({'status':  'error', 'message':  'Missing required fields'}), 400
+                return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
             
             if password != confirm_password:
                 return jsonify({'status': 'error', 'message': 'Passwords do not match'}), 400
@@ -869,10 +870,10 @@ def student_register():
                     if success:
                         with get_db() as conn:
                             cursor = conn.cursor()
-                            cursor.execute('UPDATE students SET password_hash = ?, email = ?  WHERE enroll_no = ?',
+                            cursor.execute('UPDATE students SET password_hash = ?, email = ? WHERE enroll_no = ?',
                                          (password_hash, email if email else None, enroll_no))
                             conn.commit()
-                        app.logger.info(f"Student registered:  {enroll_no}")
+                        app.logger.info(f"Student registered: {enroll_no}")
                         return jsonify({'status': 'success', 'message': 'Registration successful'})
                     return jsonify({'status': 'error', 'message': message}), 400
             
@@ -890,7 +891,7 @@ def student_register():
             
             if success:
                 app.logger.info(f"Student registered: {enroll_no}")
-                return jsonify({'status':  'success', 'message':  'Registration successful'})
+                return jsonify({'status': 'success', 'message': 'Registration successful'})
             else:
                 return jsonify({'status': 'error', 'message': message}), 400
         except Exception as e:
@@ -904,7 +905,7 @@ def student_login():
     """Student login"""
     if request.method == 'POST':
         try:
-            enroll_no = request.form. get('enroll_no', '').strip()
+            enroll_no = request.form.get('enroll_no', '').strip()
             password = request.form.get('password', '')
             
             if not enroll_no or not password:
@@ -912,7 +913,7 @@ def student_login():
             
             student = StudentModel.get_by_enroll(enroll_no)
             if not student:
-                app.logger.warning(f"Login attempt for non-existent:  {enroll_no}")
+                app.logger.warning(f"Login attempt for non-existent: {enroll_no}")
                 return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
             
             password_hash = student.get('password_hash')
@@ -926,7 +927,8 @@ def student_login():
             student_user = StudentUser(enroll_no)
             flask_login_user(student_user, remember=True)
             app.logger.info(f"Student logged in: {enroll_no}")
-            return jsonify({'status': 'success', 'message': 'Login successful', 'redirect':  url_for('main.student_dashboard')})
+            # FIX 2: Removed space after main.
+            return jsonify({'status': 'success', 'message': 'Login successful', 'redirect': url_for('main.student_dashboard')})
         except Exception as e: 
             app.logger.error(f"Error during login: {str(e)}")
             return jsonify({'status': 'error', 'message': 'Login failed'}), 500
@@ -991,12 +993,12 @@ def student_dashboard():
         return jsonify({
             'status': 'success',
             'student': {
-                'enroll_no':  student.get('enroll_no'),
+                'enroll_no': student.get('enroll_no'),
                 'name': student.get('name'),
-                'class':  student.get('class', ''),
+                'class': student.get('class', ''),
                 'email': student.get('email')
             },
-            'statistics':  {
+            'statistics': {
                 'total_days_present': stats['total_days_present'],
                 'total_days_absent': stats['total_days_absent'],
                 'total_days_in_period': stats['total_days_in_period'],
@@ -1007,7 +1009,7 @@ def student_dashboard():
             }
         })
     except Exception as e:
-        app.logger. error(f"Error loading dashboard: {str(e)}")
+        app.logger.error(f"Error loading dashboard: {str(e)}")
         return jsonify({'status': 'error', 'message': 'Failed to load'}), 500
 
 @app.route('/auth', methods=['GET'])
@@ -1016,7 +1018,8 @@ def unified_auth_page():
     if current_user.is_authenticated:
         if hasattr(current_user, "user_type") and current_user.user_type == "student": 
             return redirect(url_for("main.student_dashboard"))
-        return redirect(url_for("main. dashboard"))
+        # FIX 3: Removed space after main.
+        return redirect(url_for("main.dashboard"))
     return render_template("auth_unified.html")
 
 @app.route('/api/auth', methods=['POST'])
@@ -1072,15 +1075,15 @@ def unified_auth_api():
                     with get_db() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
-                            "UPDATE students SET password_hash = ?, email = ?  WHERE enroll_no = ?",
+                            "UPDATE students SET password_hash = ?, email = ? WHERE enroll_no = ?",
                             (password_hash, email, str(enroll_no)),
                         )
                         conn.commit()
-                    app. logger.info(f"Student registered: {enroll_no}")
+                    app.logger.info(f"Student registered: {enroll_no}")
                     return jsonify({"status": "success", "message": "Registration successful"})
 
                 password_hash = hash_password(password)
-                success, message = StudentModel. add(
+                success, message = StudentModel.add(
                     enroll_no=enroll_no,
                     name=username,
                     class_name="",
@@ -1091,7 +1094,7 @@ def unified_auth_api():
                     metadata="",
                 )
                 if success:
-                    app.logger. info(f"Student registered: {enroll_no}")
+                    app.logger.info(f"Student registered: {enroll_no}")
                     return jsonify({"status": "success", "message": "Registration successful"})
                 return jsonify({"status": "error", "message": message}), 400
 
@@ -1106,12 +1109,13 @@ def unified_auth_api():
                 return jsonify({"status": "error", "message": "Not activated"}), 401
 
             if not verify_password(password, password_hash):
-                app.logger.warning(f"Failed login:  {enroll_no}")
+                app.logger.warning(f"Failed login: {enroll_no}")
                 return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
             student_user = StudentUser(enroll_no)
             flask_login_user(student_user, remember=True)
             app.logger.info(f"Student logged in: {enroll_no}")
+            # FIX 4: Removed space after main.
             return jsonify(
                 {"status": "success", "message": "Login successful", "redirect": url_for("main.student_dashboard")}
             )
@@ -1122,11 +1126,11 @@ def unified_auth_api():
 
         admin_dept_code = getattr(config, 'ADMIN_DEPARTMENT_CODE', None)
         if admin_dept_code and department_code != admin_dept_code:
-            return jsonify({"status": "error", "message":  "Invalid department code"}), 401
+            return jsonify({"status": "error", "message": "Invalid department code"}), 401
 
         if mode == "register":
             blocked_usernames = ["admin", "administrator", "root", "system", "service", "support"]
-            if username. lower() in blocked_usernames: 
+            if username.lower() in blocked_usernames: 
                 return jsonify({"status": "error", "message": "Username not allowed"}), 400
 
             if UserModel.get_by_email(email):
@@ -1138,23 +1142,24 @@ def unified_auth_api():
             success, message = UserModel.add(email, username, password_hash)
             if success:
                 app.logger.info(f"Admin registered: {username}")
-                return jsonify({"status": "success", "message":  "Registration successful"})
+                return jsonify({"status": "success", "message": "Registration successful"})
             return jsonify({"status": "error", "message": message}), 400
 
         # Admin login
         user = UserModel.get_by_username(username)
         if user: 
-            password_hash = user. get("password_hash", "")
+            password_hash = user.get("password_hash", "")
             try:
                 if bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8")):
                     user_obj = User(username)
                     flask_login_user(user_obj, remember=True)
-                    app.logger. info(f"Admin logged in:  {username}")
+                    app.logger.info(f"Admin logged in: {username}")
+                    # FIX 5: Removed space after main.
                     return jsonify(
                         {"status": "success", "message": "Login successful", "redirect": url_for("main.dashboard")}
                     )
                 else:
-                    app. logger.warning(f"Failed admin login: {username}")
+                    app.logger.warning(f"Failed admin login: {username}")
                     return jsonify({"status": "error", "message": "Invalid credentials"}), 401
             except Exception as e:
                 app.logger.error(f"Error checking password: {str(e)}", exc_info=True)
@@ -1163,7 +1168,7 @@ def unified_auth_api():
         app.logger.warning(f"Login for non-existent admin: {username}")
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
     except Exception as e:
-        app. logger.error(f"Error in auth:  {str(e)}", exc_info=True)
+        app.logger.error(f"Error in auth: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": "Auth error"}), 500
 
 @main_bp.route('/admin/chatbot', methods=['GET'])
@@ -1207,11 +1212,11 @@ def chatbot_student_summary():
         return jsonify({
             'status': 'success',
             'student': {
-                'name': stats['student']. get('name'),
-                'enroll_no': stats['student']. get('enroll_no'),
-                'class': stats['student']. get('class')
+                'name': stats['student'].get('name'),
+                'enroll_no': stats['student'].get('enroll_no'),
+                'class': stats['student'].get('class')
             },
-            'statistics':  {
+            'statistics': {
                 'total_days_present': stats['total_days_present'],
                 'total_days_absent': stats['total_days_absent'],
                 'total_days_in_period': stats['total_days_in_period'],
@@ -1223,7 +1228,7 @@ def chatbot_student_summary():
             'summary': summary
         })
     except Exception as e:
-        app.logger.error(f"Error in chatbot:  {str(e)}", exc_info=True)
+        app.logger.error(f"Error in chatbot: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'Chatbot error'}), 500
 
 # Register blueprint
@@ -1240,19 +1245,20 @@ def uploaded_file(filename):
         file_path = os.path.join(uploads_dir, filename)
         
         if not os.path.exists(file_path) or not os.path.abspath(file_path).startswith(os.path.abspath(uploads_dir)):
-            app.logger.warning(f"Unauthorized access attempt:  {filename}")
+            app.logger.warning(f"Unauthorized access attempt: {filename}")
             return jsonify({'status': 'error', 'message': 'Not found'}), 404
         
         return send_file(file_path)
     except Exception as e: 
-        app.logger.error(f"Error serving file:  {str(e)}")
-        return jsonify({'status':  'error', 'message':  'Not found'}), 404
+        app.logger.error(f"Error serving file: {str(e)}")
+        return jsonify({'status': 'error', 'message': 'Not found'}), 404
 
 # Routes
 @app.route('/')
 def index():
     """Root endpoint"""
     if current_user.is_authenticated:
+        # FIX 6: Removed space after main.
         return redirect(url_for('main.dashboard'))
     return redirect(url_for('unified_auth_page'))
 
@@ -1260,6 +1266,7 @@ def index():
 @login_required
 def home():
     """Home endpoint"""
+    # FIX 7: Removed space after main.
     return redirect(url_for('main.dashboard'))
 
 # Error handlers
@@ -1268,7 +1275,8 @@ def not_found_error(error):
     """Handle 404"""
     if request.is_json:
         return jsonify({'status': 'error', 'message': 'Not found'}), 404
-    flash('Page not found. ', 'error')
+    flash('Page not found.', 'error')
+    # FIX 8: Removed space after main.
     return redirect(url_for('main.dashboard')), 404
 
 @app.errorhandler(500)
@@ -1278,17 +1286,19 @@ def internal_error(error):
     if request.is_json:
         msg = 'Error occurred' if config.IS_PRODUCTION else str(error)
         return jsonify({'status': 'error', 'message': msg}), 500
-    flash('An error occurred. ', 'error')
-    return redirect(url_for('main. dashboard')), 500
+    flash('An error occurred.', 'error')
+    # FIX 9: Removed space after main.
+    return redirect(url_for('main.dashboard')), 500
 
 @app.errorhandler(Exception)
 def handle_exception(error):
     """Handle all exceptions"""
-    app.logger. error(f"Exception:  {str(error)}", exc_info=True)
+    app.logger.error(f"Exception: {str(error)}", exc_info=True)
     if request.is_json:
         msg = 'Error occurred' if config.IS_PRODUCTION else str(error)
         return jsonify({'status': 'error', 'message': msg}), 500
     flash('An error occurred.', 'error')
+    # FIX 10: Removed space after main.
     return redirect(url_for('main.dashboard')), 500
 
 if __name__ == "__main__":
@@ -1299,8 +1309,8 @@ if __name__ == "__main__":
         print("⚠️  PRODUCTION MODE")
         print("=" * 60)
         print("For production, use WSGI server:")
-        print("  Windows: waitress-serve --host=0.0.0.0 --port=5000 wsgi: app")
-        print("  Linux:    gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app")
+        print("  Windows: waitress-serve --host=0.0.0.0 --port=5000 wsgi:app")
+        print("  Linux:   gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app")
         print("=" * 60)
         response = input("Continue with dev server? [y/N]: ")
         if response.lower() != 'y':
@@ -1323,4 +1333,3 @@ if __name__ == "__main__":
         port=config.PORT,
         use_reloader=not config.IS_PRODUCTION
     )
-
