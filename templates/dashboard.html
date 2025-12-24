@@ -3,15 +3,17 @@
 {% block title %}Dashboard - MarkSmart{% endblock %}
 
 {% block extra_css %}
-<meta name="csrf-token" content="{{ csrf_token() }}">
 <style>
     .hero-section { background: #f8f9fa; border-radius: 15px; margin-top: 20px; }
     .nav-tabs .nav-link { font-weight: 500; color: #495057; }
     .nav-tabs .nav-link.active { border-bottom: 3px solid #0d6efd; color: #0d6efd; }
+    .qr-container { padding: 20px; border: 1px solid #eee; border-radius: 10px; display: inline-block; }
 </style>
 {% endblock %}
 
 {% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
 <div class="hero-section mb-5" style="padding: 60px 0;">
     <div class="container-fluid">
         <div class="row align-items-end">
@@ -24,56 +26,34 @@
 </div>
 
 <ul class="nav nav-tabs mb-4" id="dashboardTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="qr-tab" data-bs-toggle="tab" data-bs-target="#qr" type="button" role="tab">
-            QR for Attendance
-        </button>
+    <li class="nav-item">
+        <button class="nav-link active" id="qr-tab" data-bs-toggle="tab" data-bs-target="#qr" type="button">QR for Attendance</button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
-            Attendance Data
-        </button>
+    <li class="nav-item">
+        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button">Attendance Data</button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="students-tab" data-bs-toggle="tab" data-bs-target="#students" type="button" role="tab">
-            Students
-        </button>
+    <li class="nav-item">
+        <button class="nav-link" id="students-tab" data-bs-toggle="tab" data-bs-target="#students" type="button">Students</button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="today-tab" data-bs-toggle="tab" data-bs-target="#today" type="button" role="tab">
-            View Today's Attendance
-        </button>
+    <li class="nav-item">
+        <button class="nav-link" id="today-tab" data-bs-toggle="tab" data-bs-target="#today" type="button">View Today's Attendance</button>
     </li>
 </ul>
 
 <div class="tab-content" id="dashboardTabsContent">
     <div class="tab-pane fade show active" id="qr" role="tabpanel">
         <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Generate Daily QR Code for Attendance</h5>
-            </div>
             <div class="card-body text-center py-5">
-                <button id="generateQRBtn" class="btn btn-primary btn-lg mb-4 shadow">
-                    <i class="fas fa-qrcode me-2"></i>Generate Today's QR Code
-                </button>
-                
+                <button id="generateQRBtn" class="btn btn-primary btn-lg mb-4">Generate Today's QR Code</button>
                 <div id="qrDisplay" class="d-none">
-                    <div class="mb-4">
-                        <img id="qrImage" src="" alt="QR Code" class="img-fluid border p-3 bg-white" style="max-width: 300px; border-radius: 10px;">
+                    <div class="qr-container mb-3">
+                        <img id="qrImage" src="" alt="QR Code" class="img-fluid" style="max-width: 300px;">
                     </div>
-                    <div class="mb-4">
-                        <div class="badge bg-light text-dark p-2 border">
-                            Token expires in: <span id="tokenExpiry" class="fw-bold text-danger">10:00</span>
-                        </div>
+                    <div class="mb-3">
+                        <span class="badge bg-danger">Expires in: <span id="tokenExpiry">10:00</span></span>
                     </div>
-                    <div class="d-grid gap-2 d-md-block">
-                        <a id="downloadQR" href="#" download="qr_code.png" class="btn btn-success me-2">
-                            <i class="fas fa-download me-1"></i> Download
-                        </a>
-                        <button id="regenerateQRBtn" class="btn btn-outline-secondary">
-                            <i class="fas fa-sync me-1"></i> Regenerate
-                        </button>
-                    </div>
+                    <a id="downloadQR" href="#" download="attendance_qr.png" class="btn btn-success">Download QR</a>
+                    <button id="regenerateQRBtn" class="btn btn-outline-secondary ms-2">Regenerate</button>
                 </div>
             </div>
         </div>
@@ -82,141 +62,117 @@
     <div class="tab-pane fade" id="attendance" role="tabpanel">
         <div class="card shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center bg-white">
-                <h5 class="mb-0">Attendance Records</h5>
-                <button id="exportAttendanceBtn" class="btn btn-sm btn-success">
-                    <i class="fas fa-file-excel me-1"></i> Export to Excel
-                </button>
+                <h5 class="mb-0">Attendance History</h5>
+                <button id="exportAttendanceBtn" class="btn btn-success btn-sm">Export Excel</button>
             </div>
             <div class="card-body">
-                <div class="row g-3 mb-4">
-                    <div class="col-md-3">
-                        <input type="date" id="filterDateFrom" class="form-control" placeholder="From Date">
-                    </div>
-                    <div class="col-md-3">
-                        <input type="date" id="filterDateTo" class="form-control" placeholder="To Date">
-                    </div>
-                    <div class="col-md-3">
-                        <input type="text" id="filterEnrollNo" class="form-control" placeholder="Enrollment No">
-                    </div>
-                    <div class="col-md-3">
-                        <button id="applyFiltersBtn" class="btn btn-primary w-100">Apply Filters</button>
-                    </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-3"><input type="date" id="filterDateFrom" class="form-control"></div>
+                    <div class="col-md-3"><input type="date" id="filterDateTo" class="form-control"></div>
+                    <div class="col-md-3"><input type="text" id="filterEnrollNo" class="form-control" placeholder="Enroll No"></div>
+                    <div class="col-md-3"><button id="applyFiltersBtn" class="btn btn-primary w-100">Filter</button></div>
                 </div>
-                <div class="table-responsive">
-                    <table id="attendanceTable" class="table table-hover table-bordered w-100">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Enrollment No</th>
-                                <th>Name</th>
-                                <th>Date</th>
-                                <th>Time</th>
-                                <th>Location</th>
-                                <th>Liveness</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+                <table id="attendanceTable" class="table table-bordered table-striped w-100">
+                    <thead>
+                        <tr>
+                            <th>Enroll No</th>
+                            <th>Name</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Location</th>
+                            <th>Liveness</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <div class="tab-pane fade" id="students" role="tabpanel">
         <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center bg-white">
-                <h5 class="mb-0 text-primary">Student Management</h5>
+            <div class="card-header d-flex justify-content-between bg-white">
+                <h5 class="mb-0">Student List</h5>
                 <div>
-                    <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-                        <i class="fas fa-plus me-1"></i> Add Student
-                    </button>
-                    <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
-                        <i class="fas fa-upload me-1"></i> Bulk Upload
-                    </button>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">Add New</button>
+                    <button class="btn btn-info btn-sm text-white" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">Bulk Upload</button>
                 </div>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table id="studentsTable" class="table table-hover table-bordered w-100">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Enrollment No</th>
-                                <th>Name</th>
-                                <th>Class</th>
-                                <th>Photo</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+                <table id="studentsTable" class="table table-bordered w-100">
+                    <thead>
+                        <tr>
+                            <th>Enroll No</th>
+                            <th>Name</th>
+                            <th>Class</th>
+                            <th>Photo</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <div class="tab-pane fade" id="today" role="tabpanel">
-        <div class="card shadow-sm border-primary">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Live Today: <span id="todayCount" class="badge bg-white text-primary ms-2">0</span></h5>
-            </div>
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">Present Today: <span id="todayCount">0</span></div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table id="todayTable" class="table table-hover table-bordered w-100">
-                        <thead>
-                            <tr>
-                                <th>Enroll No</th>
-                                <th>Name</th>
-                                <th>Time</th>
-                                <th>Location</th>
-                                <th>Liveness</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+                <table id="todayTable" class="table table-hover w-100">
+                    <thead>
+                        <tr>
+                            <th>Enroll No</th>
+                            <th>Name</th>
+                            <th>Time</th>
+                            <th>Location</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
-{% include "includes/modals.html" ignore missing %}
-
-{% if not modals_loaded %}
 <div class="modal fade" id="addStudentModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add New Student</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="addStudentForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <form id="addStudentForm" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header"><h5>Add Student</h5></div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Enrollment Number *</label>
-                        <input type="text" class="form-control" name="enroll_no" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Full Name *</label>
-                        <input type="text" class="form-control" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Class/Section *</label>
-                        <input type="text" class="form-control" name="class" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Profile Photo *</label>
-                        <input type="file" class="form-control" name="photo" accept="image/*" required>
-                    </div>
+                    <input type="text" name="enroll_no" class="form-control mb-2" placeholder="Enrollment No" required>
+                    <input type="text" name="name" class="form-control mb-2" placeholder="Full Name" required>
+                    <input type="text" name="class" class="form-control mb-2" placeholder="Class" required>
+                    <input type="file" name="photo" class="form-control mb-2" accept="image/*" required>
+                    <textarea name="metadata" class="form-control" placeholder="Other details"></textarea>
                 </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary w-100">Save Student</button>
-                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button></div>
             </form>
         </div>
     </div>
 </div>
-{% endif %}
+
+<div class="modal fade" id="bulkUploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="bulkUploadForm" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header"><h5>Bulk Upload</h5></div>
+                <div class="modal-body">
+                    <label>Excel File (.xlsx)</label>
+                    <input type="file" name="excel_file" class="form-control mb-3" accept=".xlsx,.xls" required>
+                    <label>Photos ZIP (Optional)</label>
+                    <input type="file" name="photos_zip" class="form-control" accept=".zip">
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Upload All</button></div>
+            </form>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
