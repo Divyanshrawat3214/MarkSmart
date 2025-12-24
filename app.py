@@ -1151,7 +1151,7 @@ def unified_auth_api():
                     flask_login_user(user_obj, remember=True)
                     app.logger. info(f"Admin logged in:  {username}")
                     return jsonify(
-                        {"status": "success", "message": "Login successful", "redirect": url_for("main. dashboard")}
+                        {"status": "success", "message": "Login successful", "redirect": url_for("main.dashboard")}
                     )
                 else:
                     app. logger.warning(f"Failed admin login: {username}")
@@ -1323,3 +1323,4 @@ if __name__ == "__main__":
         port=config.PORT,
         use_reloader=not config.IS_PRODUCTION
     )
+
