@@ -1,39 +1,111 @@
-<!DOCTYPE html>
+<! DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Chatbot - Student Statistics</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        .chatbot-container { border: 1px solid #ddd; border-radius: 8px; padding: 20px; background: #f9f9f9; }
-        .chatbot-header { margin-bottom: 20px; color: #333; }
-        .input-group { margin-bottom: 15px; }
-        .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .btn:hover { background: #0056b3; }
-        .btn:disabled { background: #ccc; cursor: not-allowed; }
-        .response-area { margin-top: 20px; padding: 15px; background: white; border: 1px solid #ddd; border-radius: 4px; min-height: 200px; }
-        .loading { color: #666; font-style: italic; }
-        .error { color: #dc3545; }
-        .success { color: #28a745; }
-        .stats-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        .stats-table th, .stats-table td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-        .stats-table th { background-color: #f8f9fa; font-weight: bold; }
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 50px auto; 
+            padding:  20px; 
+        }
+        .chatbot-container { 
+            border: 1px solid #ddd; 
+            border-radius:  8px; 
+            padding: 20px; 
+            background:  #f9f9f9; 
+        }
+        .chatbot-header { 
+            margin-bottom: 20px; 
+            color: #333; 
+        }
+        .input-group { 
+            margin-bottom:  15px; 
+        }
+        . input-group label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: bold; 
+        }
+        .input-group input { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+        }
+        .btn { 
+            padding: 10px 20px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
+        .btn:hover { 
+            background: #0056b3; 
+        }
+        .btn: disabled { 
+            background: #ccc; 
+            cursor:  not-allowed; 
+        }
+        .response-area { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background: white; 
+            border:  1px solid #ddd; 
+            border-radius: 4px; 
+            min-height: 200px; 
+        }
+        .loading { 
+            color: #666; 
+            font-style: italic; 
+        }
+        .error { 
+            color: #dc3545; 
+        }
+        .success { 
+            color: #28a745; 
+        }
+        .stats-table { 
+            width:  100%; 
+            border-collapse: collapse; 
+            margin:  15px 0; 
+        }
+        .stats-table th, .stats-table td { 
+            padding: 8px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+        }
+        .stats-table th { 
+            background-color: #f8f9fa; 
+            font-weight: bold; 
+        }
     </style>
 </head>
 <body>
     <div class="chatbot-container">
         <h2 class="chatbot-header">Student Statistical Summary Chatbot</h2>
-        <p><strong>Option:</strong> Student Statistical Summary</p>
+        <p><strong>Option: </strong> Student Statistical Summary</p>
         
-        <div class="input-group">
-            <label for="studentQuery">Enter Student Enrollment Number or Name:</label>
-            <input type="text" id="studentQuery" placeholder="e.g., 0131AD231023 or John Doe">
-        </div>
-        
-        <button class="btn" id="submitBtn" onclick="submitQuery()">Get Summary</button>
+        <form id="studentForm" onsubmit="submitQuery(event)">
+            <div class="input-group">
+                <label for="studentQuery">Enter Student Enrollment Number or Name:</label>
+                <input 
+                    type="text" 
+                    id="studentQuery" 
+                    name="studentQuery"
+                    placeholder="e.g., 0131AD231023 or John Doe"
+                    required
+                    aria-label="Student enrollment number or name"
+                >
+            </div>
+            
+            <button class="btn" id="submitBtn" type="submit">Get Summary</button>
+        </form>
         
         <div class="response-area" id="responseArea">
             <p style="color: #666;">Enter a student enrollment number or name to get their attendance statistics summary.</p>
@@ -41,78 +113,180 @@
     </div>
 
     <script>
-        function submitQuery() {
+        async function submitQuery(event) {
+            event.preventDefault();
+            
             const query = document.getElementById('studentQuery').value.trim();
             const responseArea = document.getElementById('responseArea');
             const submitBtn = document.getElementById('submitBtn');
             
-            if (!query) {
-                responseArea.innerHTML = '<p class="error">Please enter a student enrollment number or name.</p>';
+            // Validation
+            if (!query || query.length === 0) {
+                showError(responseArea, 'Please enter a student enrollment number or name.');
                 return;
             }
             
-            submitBtn.disabled = true;
-            responseArea.innerHTML = '<p class="loading">Processing request...</p>';
+            if (query.length < 2) {
+                showError(responseArea, 'Please enter at least 2 characters.');
+                return;
+            }
             
-            fetch('/api/admin/chatbot/student-summary', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ query: query })
-            })
-            .then(response => response.json())
-            .then(data => {
-                submitBtn.disabled = false;
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            showLoading(responseArea);
+            
+            try {
+                const response = await fetch('/api/admin/chatbot/student-summary', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
                 
-                if (data.status === 'success') {
-                    let html = '<div class="success">';
-                    html += '<h3>Student Information</h3>';
-                    html += '<p><strong>Name:</strong> ' + data.student.name + '</p>';
-                    html += '<p><strong>Enrollment Number:</strong> ' + data.student.enroll_no + '</p>';
-                    html += '<p><strong>Class:</strong> ' + data.student.class + '</p>';
-                    
-                    html += '<h3>Attendance Statistics</h3>';
-                    html += '<table class="stats-table">';
-                    html += '<tr><th>Metric</th><th>Value</th></tr>';
-                    html += '<tr><td>Total Days Present</td><td>' + data.statistics.total_days_present + '</td></tr>';
-                    html += '<tr><td>Total Days Absent</td><td>' + data.statistics.total_days_absent + '</td></tr>';
-                    html += '<tr><td>Total Days in Period</td><td>' + data.statistics.total_days_in_period + '</td></tr>';
-                    html += '<tr><td>Attendance Percentage</td><td>' + data.statistics.attendance_percentage + '%</td></tr>';
-                    html += '<tr><td>First Attendance Date</td><td>' + (data.statistics.first_attendance_date || 'N/A') + '</td></tr>';
-                    html += '<tr><td>Last Attendance Date</td><td>' + (data.statistics.last_attendance_date || 'N/A') + '</td></tr>';
-                    html += '</table>';
-                    
-                    if (Object.keys(data.statistics.monthly_breakdown).length > 0) {
-                        html += '<h3>Monthly Breakdown</h3><ul>';
-                        for (const [month, count] of Object.entries(data.statistics.monthly_breakdown)) {
-                            html += '<li>' + month + ': ' + count + ' day(s)</li>';
-                        }
-                        html += '</ul>';
-                    }
-                    
-                    html += '<h3>Summary</h3>';
-                    html += '<p>' + data.summary.replace(/\n/g, '<br>') + '</p>';
-                    html += '</div>';
-                    
-                    responseArea.innerHTML = html;
-                } else {
-                    responseArea.innerHTML = '<p class="error">Error: ' + (data.message || 'Unknown error') + '</p>';
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response. status}`);
                 }
-            })
-            .catch(error => {
-                submitBtn.disabled = false;
-                responseArea.innerHTML = '<p class="error">Network error. Please try again.</p>';
+                
+                const data = await response. json();
+                
+                if (data.status === 'success' && data.student && data.statistics) {
+                    displaySuccessResponse(responseArea, data);
+                } else {
+                    const errorMsg = data.message || 'Unknown error occurred';
+                    showError(responseArea, errorMsg);
+                }
+            } catch (error) {
                 console.error('Error:', error);
-            });
+                showError(responseArea, 'Network error. Please try again.');
+            } finally {
+                submitBtn. disabled = false;
+            }
         }
         
+        function showLoading(element) {
+            element.innerHTML = '';
+            const p = document.createElement('p');
+            p.className = 'loading';
+            p.textContent = 'Processing request...';
+            element.appendChild(p);
+        }
+        
+        function showError(element, message) {
+            element.innerHTML = '';
+            const p = document.createElement('p');
+            p.className = 'error';
+            p.textContent = 'Error: ' + message;
+            element.appendChild(p);
+        }
+        
+        function displaySuccessResponse(element, data) {
+            element.innerHTML = '';
+            
+            const container = document.createElement('div');
+            container.className = 'success';
+            
+            // Student Information
+            const studentSection = document.createElement('section');
+            const studentTitle = document.createElement('h3');
+            studentTitle.textContent = 'Student Information';
+            studentSection.appendChild(studentTitle);
+            
+            const studentInfo = document.createElement('div');
+            studentInfo.appendChild(createInfoParagraph('Name:', data.student.name));
+            studentInfo.appendChild(createInfoParagraph('Enrollment Number:', data.student.enroll_no));
+            studentInfo.appendChild(createInfoParagraph('Class:', data.student.class));
+            studentSection.appendChild(studentInfo);
+            container.appendChild(studentSection);
+            
+            // Attendance Statistics
+            const statsSection = document.createElement('section');
+            const statsTitle = document. createElement('h3');
+            statsTitle.textContent = 'Attendance Statistics';
+            statsSection. appendChild(statsTitle);
+            
+            const table = document.createElement('table');
+            table.className = 'stats-table';
+            
+            const thead = document.createElement('thead');
+            const headerRow = document. createElement('tr');
+            const metricHeader = document.createElement('th');
+            metricHeader.textContent = 'Metric';
+            const valueHeader = document.createElement('th');
+            valueHeader.textContent = 'Value';
+            headerRow.appendChild(metricHeader);
+            headerRow.appendChild(valueHeader);
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            const tbody = document.createElement('tbody');
+            tbody.appendChild(createTableRow('Total Days Present', data.statistics.total_days_present));
+            tbody.appendChild(createTableRow('Total Days Absent', data.statistics.total_days_absent));
+            tbody. appendChild(createTableRow('Total Days in Period', data.statistics.total_days_in_period));
+            tbody.appendChild(createTableRow('Attendance Percentage', (data.statistics.attendance_percentage || 0) + '%'));
+            tbody.appendChild(createTableRow('First Attendance Date', data.statistics.first_attendance_date || 'N/A'));
+            tbody.appendChild(createTableRow('Last Attendance Date', data.statistics. last_attendance_date || 'N/A'));
+            table.appendChild(tbody);
+            statsSection.appendChild(table);
+            container.appendChild(statsSection);
+            
+            // Monthly Breakdown
+            if (data.statistics.monthly_breakdown && Object.keys(data.statistics.monthly_breakdown).length > 0) {
+                const monthlySection = document.createElement('section');
+                const monthlyTitle = document.createElement('h3');
+                monthlyTitle.textContent = 'Monthly Breakdown';
+                monthlySection.appendChild(monthlyTitle);
+                
+                const ul = document.createElement('ul');
+                for (const [month, count] of Object.entries(data.statistics. monthly_breakdown)) {
+                    const li = document.createElement('li');
+                    li.textContent = month + ': ' + count + ' day(s)';
+                    ul.appendChild(li);
+                }
+                monthlySection.appendChild(ul);
+                container.appendChild(monthlySection);
+            }
+            
+            // Summary
+            const summarySection = document.createElement('section');
+            const summaryTitle = document.createElement('h3');
+            summaryTitle.textContent = 'Summary';
+            summarySection.appendChild(summaryTitle);
+            
+            const summaryParagraph = document.createElement('p');
+            summaryParagraph.textContent = data.summary || 'No summary available';
+            summarySection. appendChild(summaryParagraph);
+            container.appendChild(summarySection);
+            
+            element.appendChild(container);
+        }
+        
+        function createInfoParagraph(label, value) {
+            const p = document.createElement('p');
+            const strong = document.createElement('strong');
+            strong.textContent = label;
+            p.appendChild(strong);
+            p.appendChild(document. createTextNode(' ' + (value || 'N/A')));
+            return p;
+        }
+        
+        function createTableRow(metric, value) {
+            const tr = document.createElement('tr');
+            const td1 = document.createElement('td');
+            td1.textContent = metric;
+            const td2 = document.createElement('td');
+            td2.textContent = value;
+            tr.appendChild(td1);
+            tr.appendChild(td2);
+            return tr;
+        }
+        
+        // Enter key support
         document.getElementById('studentQuery').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                submitQuery();
+            if (e. key === 'Enter') {
+                submitQuery(e);
             }
         });
     </script>
 </body>
 </html>
-
