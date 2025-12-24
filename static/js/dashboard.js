@@ -255,4 +255,3 @@ async function loadTodayAttendance() {
         console.error('Error loading today\'s attendance:', error);
     }
 }
-
