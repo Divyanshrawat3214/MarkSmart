@@ -39,7 +39,7 @@ def compute_student_statistics(enroll_no):
         cursor = conn.cursor()
         cursor.execute('''
             SELECT date, time FROM attendance 
-            WHERE enroll_no = ? 
+            WHERE enroll_no = ?  
             ORDER BY date ASC, time ASC
         ''', (str(enroll_no),))
         attendance_records = cursor.fetchall()
@@ -48,9 +48,9 @@ def compute_student_statistics(enroll_no):
         return {
             'student': student,
             'total_days_present': 0,
-            'total_days_absent': 0,
+            'total_days_absent':  0,
             'total_days_in_period': 0,
-            'attendance_percentage': 0.0,
+            'attendance_percentage':  0.0,
             'first_attendance_date': None,
             'last_attendance_date': None,
             'monthly_breakdown': {}
@@ -59,7 +59,7 @@ def compute_student_statistics(enroll_no):
     unique_dates = set()
     monthly_count = {}
     
-    for record in attendance_records:
+    for record in attendance_records: 
         date_str = record['date']
         unique_dates.add(date_str)
         
@@ -67,7 +67,8 @@ def compute_student_statistics(enroll_no):
             date_obj = datetime.strptime(date_str, '%Y-%m-%d')
             month_key = date_obj.strftime('%Y-%m')
             monthly_count[month_key] = monthly_count.get(month_key, 0) + 1
-        except:
+        except ValueError:
+            logger.warning(f"Invalid date format:  {date_str}")
             pass
     
     first_date = min(unique_dates) if unique_dates else None
@@ -87,10 +88,11 @@ def compute_student_statistics(enroll_no):
             end = datetime.strptime(last_date, '%Y-%m-%d')
             total_days_in_period = (end - start).days + 1
             total_days_absent = max(0, total_days_in_period - total_days_present)
-        except:
+        except ValueError:
+            logger.warning(f"Error calculating date range from {first_date} to {last_date}")
             total_days_in_period = total_days_present
             total_days_absent = 0
-    else:
+    else: 
         total_days_in_period = total_days_present
         total_days_absent = 0
     
@@ -115,28 +117,28 @@ def generate_gemini_summary(stats_data):
     
     try:
         import google.generativeai as genai
-        genai.configure(api_key=config.GEMINI_API_KEY)
+        genai.configure(api_key=config. GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-pro')
         
         student = stats_data['student']
         
-        prompt = f"""You are an administrative assistant generating a professional student attendance summary.
+        prompt = f"""You are an administrative assistant generating a professional student attendance summary. 
 
-Use ONLY the following data. Do NOT assume or invent any values.
+Use ONLY the following data. Do NOT assume or invent any values. 
 
 Student Information:
-- Name: {student.get('name', 'N/A')}
+- Name:  {student.get('name', 'N/A')}
 - Enrollment Number: {student.get('enroll_no', 'N/A')}
 - Class: {student.get('class', 'N/A')}
 
 Attendance Statistics:
 - Total Days Present: {stats_data['total_days_present']}
 - Total Days Absent: {stats_data['total_days_absent']}
-- Total Days in Period: {stats_data['total_days_in_period']}
+- Total Days in Period:  {stats_data['total_days_in_period']}
 - Attendance Percentage: {stats_data['attendance_percentage']}%
 - First Attendance Date: {stats_data['first_attendance_date'] or 'N/A'}
-- Last Attendance Date: {stats_data['last_attendance_date'] or 'N/A'}
-- Monthly Breakdown: {stats_data['monthly_breakdown']}
+- Last Attendance Date:  {stats_data['last_attendance_date'] or 'N/A'}
+- Monthly Breakdown:  {stats_data['monthly_breakdown']}
 
 Generate a concise, professional administrative summary (2-3 sentences) that includes:
 1. Student identification
@@ -150,4 +152,3 @@ Keep the tone professional and administrative. Use only the provided data."""
     except Exception as e:
         logger.error(f"Error generating Gemini summary: {str(e)}", exc_info=True)
         return "Error generating summary. Please check logs."
-
